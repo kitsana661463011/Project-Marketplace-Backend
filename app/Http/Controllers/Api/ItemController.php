@@ -9,6 +9,18 @@ use Illuminate\Support\Facades\Validator;
 
 class ItemController extends Controller
 {
+    private function uploadImage($file, $oldImage = null)
+    {
+        if ($oldImage) {
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($oldImage);
+        }
+
+        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+        $file->storeAs('', $filename, 'custom_images');
+
+        return $filename;
+    }
+
     public function index()
     {
         $items = Item::with(['shop', 'category'])->get();
@@ -27,7 +39,7 @@ class ItemController extends Controller
             'item_name' => ['required', 'string', 'max:100'],
             'price' => ['required', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
-            'item_image' => ['nullable', 'string', 'max:255'],
+            'item_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
             'category_id' => ['required', 'integer', 'exists:item_category,category_id'],
         ]);
 
@@ -39,7 +51,17 @@ class ItemController extends Controller
             ], 422);
         }
 
-        $item = Item::create($request->only(['shop_id', 'item_name', 'price', 'description', 'item_image', 'category_id']));
+        $imagePath = null;
+        if ($request->hasFile('item_image')) {
+            $imagePath = $this->uploadImage($request->file('item_image'));
+        }
+
+        $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
+        if ($imagePath) {
+            $data['item_image'] = $imagePath;
+        }
+
+        $item = Item::create($data);
 
         return response()->json([
             'status' => true,
@@ -84,7 +106,7 @@ class ItemController extends Controller
             'item_name' => ['sometimes', 'string', 'max:100'],
             'price' => ['sometimes', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
-            'item_image' => ['nullable', 'string', 'max:255'],
+            'item_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
             'category_id' => ['sometimes', 'integer', 'exists:item_category,category_id'],
         ]);
 
@@ -96,7 +118,12 @@ class ItemController extends Controller
             ], 422);
         }
 
-        $item->update($request->only(['shop_id', 'item_name', 'price', 'description', 'item_image', 'category_id']));
+        $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
+        if ($request->hasFile('item_image')) {
+            $data['item_image'] = $this->uploadImage($request->file('item_image'), $item->item_image);
+        }
+
+        $item->update($data);
 
         return response()->json([
             'status' => true,
@@ -115,6 +142,10 @@ class ItemController extends Controller
                 'message' => 'Item not found',
                 'data' => null,
             ], 404);
+        }
+
+        if ($item->item_image) {
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($item->item_image);
         }
 
         $item->delete();

@@ -66,7 +66,7 @@ class SellerManagementController extends Controller
                     'status' => $user->status,
                     'document_status' => $user->document_status,
                     'document_image' => $user->document_image,
-                    'document_url' => $user->document_image ? asset('storage/' . $user->document_image) : null,
+                    'document_url' => $user->document_image ? asset('api/images/' . $user->document_image) : null,
                     'current_stalls' => $currentStalls,
                     'created_at' => $this->formatApiDate($user->created_at),
                 ];
@@ -111,7 +111,7 @@ class SellerManagementController extends Controller
                     'submission_date' => $this->formatApiDate($user->submission_date ?? $user->created_at),
                     'document_status' => $user->document_status,
                     'document_image' => $user->document_image,
-                    'document_url' => $user->document_image ? asset('storage/' . $user->document_image) : null,
+                    'document_url' => $user->document_image ? asset('api/images/' . $user->document_image) : null,
                     'status' => $user->status,
                 ];
             });

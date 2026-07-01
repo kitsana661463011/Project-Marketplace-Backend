@@ -12,7 +12,10 @@ class PaymentController extends Controller
 {
     public function index()
     {
-        $payments = Payment::with(['booking'])->get();
+        $payments = Payment::with(['booking.user', 'booking.stall'])
+            ->orderBy('payment_date', 'desc')
+            ->orderBy('payment_id', 'desc')
+            ->get();
 
         return response()->json([
             'status' => true,

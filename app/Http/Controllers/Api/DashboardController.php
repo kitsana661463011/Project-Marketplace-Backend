@@ -116,4 +116,18 @@ class DashboardController extends Controller
             ],
         ], 200);
     }
+
+    public function badgeCounts()
+    {
+        $pendingBookings = (int) StallBooking::where('status', 'pending')->count();
+        $pendingReports  = (int) ProblemReport::where('status', 'pending')->count();
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'verifications' => $pendingBookings,
+                'reports'       => $pendingReports,
+            ],
+        ], 200);
+    }
 }

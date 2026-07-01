@@ -46,19 +46,22 @@ class MarketPaymentSettingController extends Controller
         }
 
         if ($request->boolean('remove_qr_code')) {
-            if ($setting->qr_code_path && Storage::disk('public')->exists($setting->qr_code_path)) {
-                Storage::disk('public')->delete($setting->qr_code_path);
+            if ($setting->qr_code_path) {
+                \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($setting->qr_code_path);
             }
             $setting->qr_code_path = null;
         }
 
         if ($request->hasFile('qr_code')) {
-            if ($setting->qr_code_path && Storage::disk('public')->exists($setting->qr_code_path)) {
-                Storage::disk('public')->delete($setting->qr_code_path);
+            if ($setting->qr_code_path) {
+                \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($setting->qr_code_path);
             }
 
-            $path = $this->storeUploadedFile($request->file('qr_code'));
-            $setting->qr_code_path = $path;
+            $file = $request->file('qr_code');
+            $filename = time() . '_qrcode.' . $file->getClientOriginalExtension();
+            $file->storeAs('', $filename, 'custom_images');
+
+            $setting->qr_code_path = $filename;
         }
 
         $setting->account_name = $request->input('account_name');
@@ -70,21 +73,5 @@ class MarketPaymentSettingController extends Controller
             'message' => 'Payment settings updated successfully',
             'data' => $setting->fresh(),
         ], 200);
-    }
-
-    protected function storeUploadedFile(UploadedFile $file): string
-    {
-        $relativePath = $file->hashName('qr-codes');
-        $relativePath = str_replace('\\', '/', $relativePath);
-
-        $absoluteDirectory = dirname(storage_path('app/public/' . $relativePath));
-
-        if (! is_dir($absoluteDirectory)) {
-            mkdir($absoluteDirectory, 0755, true);
-        }
-
-        $file->move($absoluteDirectory, basename($relativePath));
-
-        return $relativePath;
     }
 }

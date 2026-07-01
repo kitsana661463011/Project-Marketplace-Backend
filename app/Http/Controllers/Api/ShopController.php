@@ -10,6 +10,18 @@ use Illuminate\Validation\Rule;
 
 class ShopController extends Controller
 {
+    private function uploadImage($file, $oldImage = null)
+    {
+        if ($oldImage) {
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($oldImage);
+        }
+
+        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+        $file->storeAs('', $filename, 'custom_images');
+
+        return $filename;
+    }
+
     public function index()
     {
         $shops = Shop::with(['category', 'owner'])->get();
@@ -27,7 +39,9 @@ class ShopController extends Controller
             'shop_name' => ['required', 'string', 'max:100'],
             'category_id' => ['required', 'integer', 'exists:shop_category,category_id'],
             'description' => ['nullable', 'string'],
-            'shop_image' => ['nullable', 'string', 'max:255'],
+            'shop_phone' => ['nullable', 'string', 'max:15'],
+            'social_links' => ['nullable', 'json'],
+            'shop_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
             'user_id' => ['required', 'integer', 'exists:user,user_id'],
         ]);
 
@@ -39,7 +53,17 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $shop = Shop::create($request->only(['shop_name', 'category_id', 'description', 'shop_image', 'user_id']));
+        $imagePath = null;
+        if ($request->hasFile('shop_image')) {
+            $imagePath = $this->uploadImage($request->file('shop_image'));
+        }
+
+        $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
+        if ($imagePath) {
+            $data['shop_image'] = $imagePath;
+        }
+
+        $shop = Shop::create($data);
 
         return response()->json([
             'status' => true,
@@ -83,7 +107,9 @@ class ShopController extends Controller
             'shop_name' => ['sometimes', 'string', 'max:100'],
             'category_id' => ['sometimes', 'integer', 'exists:shop_category,category_id'],
             'description' => ['nullable', 'string'],
-            'shop_image' => ['nullable', 'string', 'max:255'],
+            'shop_phone' => ['nullable', 'string', 'max:15'],
+            'social_links' => ['nullable', 'json'],
+            'shop_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
             'user_id' => ['sometimes', 'integer', 'exists:user,user_id'],
         ]);
 
@@ -95,7 +121,12 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $shop->update($request->only(['shop_name', 'category_id', 'description', 'shop_image', 'user_id']));
+        $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
+        if ($request->hasFile('shop_image')) {
+            $data['shop_image'] = $this->uploadImage($request->file('shop_image'), $shop->shop_image);
+        }
+
+        $shop->update($data);
 
         return response()->json([
             'status' => true,
@@ -114,6 +145,10 @@ class ShopController extends Controller
                 'message' => 'Shop not found',
                 'data' => null,
             ], 404);
+        }
+
+        if ($shop->shop_image) {
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($shop->shop_image);
         }
 
         $shop->delete();

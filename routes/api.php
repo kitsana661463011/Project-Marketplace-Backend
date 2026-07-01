@@ -11,8 +11,17 @@ use App\Http\Controllers\Api\SellerManagementController;
 use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\StallBookingController;
 use App\Http\Controllers\Api\StallController;
+use App\Http\Controllers\Api\MarketMapController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('images/{filename}', function ($filename) {
+    $path = 'F:/Project-MarketPlace/admin/backend/storage/images/' . $filename;
+    if (!file_exists($path)) {
+        abort(404);
+    }
+    return response()->file($path);
+});
 
 Route::prefix('admin')->group(function () {
     Route::get('sellers', [SellerManagementController::class, 'index']);
@@ -31,6 +40,9 @@ Route::prefix('admin')->group(function () {
 
 Route::prefix('v1')->group(function () {
     Route::get('dashboard/overview', [DashboardController::class, 'overview']);
+    Route::get('dashboard/badge-counts', [DashboardController::class, 'badgeCounts']);
+    Route::get('maps/{id}', [MarketMapController::class, 'show']);
+    Route::put('maps/{id}/items', [MarketMapController::class, 'saveItems']);
     Route::apiResource('users', UserController::class);
     Route::apiResource('shops', ShopController::class);
     Route::apiResource('items', ItemController::class);

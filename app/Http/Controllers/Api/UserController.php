@@ -31,6 +31,11 @@ class UserController extends Controller
             'profile_image' => ['nullable', 'string', 'max:255'],
             'role' => ['required', Rule::in(['buyer', 'seller', 'admin'])],
             'status' => ['nullable', Rule::in(['active', 'inactive', 'banned'])],
+            'citizen_id' => ['nullable', 'string', 'max:20'],
+            'address' => ['nullable', 'string'],
+            'document_status' => ['nullable', Rule::in(['pending', 'approved', 'rejected', 'request_more'])],
+            'submission_date' => ['nullable', 'date'],
+            'document_image' => ['nullable', 'string', 'max:255'],
         ]);
 
         if ($validator->fails()) {
@@ -49,6 +54,11 @@ class UserController extends Controller
             'profile_image' => $request->profile_image,
             'role' => $request->role,
             'status' => $request->status ?? 'active',
+            'citizen_id' => $request->citizen_id,
+            'address' => $request->address,
+            'document_status' => $request->document_status ?? 'pending',
+            'submission_date' => $request->submission_date,
+            'document_image' => $request->document_image,
         ]);
 
         return response()->json([
@@ -97,6 +107,11 @@ class UserController extends Controller
             'profile_image' => ['nullable', 'string', 'max:255'],
             'role' => ['sometimes', Rule::in(['buyer', 'seller', 'admin'])],
             'status' => ['sometimes', Rule::in(['active', 'inactive', 'banned'])],
+            'citizen_id' => ['nullable', 'string', 'max:20'],
+            'address' => ['nullable', 'string'],
+            'document_status' => ['nullable', Rule::in(['pending', 'approved', 'rejected', 'request_more'])],
+            'submission_date' => ['nullable', 'date'],
+            'document_image' => ['nullable', 'string', 'max:255'],
         ]);
 
         if ($validator->fails()) {
@@ -107,7 +122,7 @@ class UserController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role', 'status']);
+        $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role', 'status', 'citizen_id', 'address', 'document_status', 'submission_date', 'document_image']);
 
         if ($request->filled('password')) {
             $data['password'] = bcrypt($request->password);

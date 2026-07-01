@@ -16,6 +16,8 @@ class Shop extends Model
         'shop_name',
         'category_id',
         'description',
+        'shop_phone',
+        'social_links',
         'shop_image',
         'user_id',
     ];

@@ -60,6 +60,13 @@ return [
             'report' => false,
         ],
 
+        'custom_images' => [
+            'driver' => 'local',
+            'root' => 'F:/Project-MarketPlace/admin/backend/storage/images',
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*

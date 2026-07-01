@@ -36,6 +36,7 @@ class User extends Authenticatable
         'document_status',
         'submission_date',
         'document_image',
+        'address',
     ];
 
     /**
