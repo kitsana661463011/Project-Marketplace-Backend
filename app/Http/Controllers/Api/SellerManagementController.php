@@ -35,7 +35,7 @@ class SellerManagementController extends Controller
             ->where('document_status', 'approved')
             ->with(['stallBookings' => function ($query) {
                 $query->where('status', 'approved')
-                    ->with('stall:id,stall_number');
+                    ->with('stall:stall_id,stall_number');
             }]);
 
         if ($search !== '') {

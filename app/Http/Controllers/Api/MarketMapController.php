@@ -55,7 +55,7 @@ class MarketMapController extends Controller
                 'fill_color'  => $item->fill_color,
                 'rotation'    => (int)$item->rotation,
                 'z_index'     => (int)$item->z_index,
-                'status'      => $item->stall ? $item->stall->status : 'available',
+                'status'      => $item->stall ? ($item->stall->status === 'maintenance' ? 'repair' : $item->stall->status) : 'available',
                 'seller'      => $seller,
             ];
         });
@@ -107,6 +107,8 @@ class MarketMapController extends Controller
             'items.*.stall_id'    => 'nullable|integer',
             'items.*.zone_id'     => 'nullable|integer',
             'items.*.label'       => 'nullable|string|max:100',
+            'items.*.size'        => 'nullable|string|max:50',
+            'items.*.status'      => 'nullable|string|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -142,11 +144,47 @@ class MarketMapController extends Controller
                     $itemId = $item['map_item_id'];
                     $isNew = !is_numeric($itemId) || str_starts_with((string)$itemId, 'new-');
 
+                    $stallId = $item['stall_id'] ?? null;
+                    if ($item['item_type'] === 'block') {
+                        // Check if we need to create a new Stall
+                        if (!$stallId) {
+                            $zoneId = $item['zone_id'] ?? null;
+                            if (!$zoneId) {
+                                $zoneId = \App\Models\MarketZone::first()?->zone_id ?? 1;
+                            }
+                            
+                            // Check if a stall with the same number already exists to prevent duplicates
+                            $existingStall = \App\Models\Stall::where('stall_number', $item['label'])->first();
+                            if ($existingStall) {
+                                $stallId = $existingStall->stall_id;
+                            } else {
+                                $newStall = \App\Models\Stall::create([
+                                    'stall_number' => $item['label'] ?? ('STALL-' . uniqid()),
+                                    'size'         => $item['size'] ?? '3x3 เมตร',
+                                    'status'       => ($item['status'] ?? 'available') === 'repair' ? 'maintenance' : ($item['status'] ?? 'available'),
+                                    'zone_id'      => $zoneId,
+                                ]);
+                                $stallId = $newStall->stall_id;
+                            }
+                        } else {
+                            // Update existing stall properties (size, status, zone_id, stall_number)
+                            $stall = \App\Models\Stall::find($stallId);
+                            if ($stall) {
+                                $stall->update([
+                                    'stall_number' => $item['label'] ?? $stall->stall_number,
+                                    'size'         => $item['size'] ?? $stall->size,
+                                    'status'       => ($item['status'] ?? 'available') === 'repair' ? 'maintenance' : ($item['status'] ?? 'available'),
+                                    'zone_id'      => $item['zone_id'] ?? $stall->zone_id,
+                                ]);
+                            }
+                        }
+                    }
+
                     if ($isNew) {
                         MarketMapItem::create([
                             'map_id'     => $map->map_id,
                             'item_type'  => $item['item_type'],
-                            'stall_id'   => $item['stall_id'] ?? null,
+                            'stall_id'   => $stallId,
                             'zone_id'    => $item['zone_id'] ?? null,
                             'label'      => $item['label'] ?? '',
                             'x'          => (int)$item['x'],
@@ -161,7 +199,7 @@ class MarketMapController extends Controller
                             ->where('map_item_id', (int)$itemId)
                             ->update([
                                 'item_type'  => $item['item_type'],
-                                'stall_id'   => $item['stall_id'] ?? null,
+                                'stall_id'   => $stallId,
                                 'zone_id'    => $item['zone_id'] ?? null,
                                 'label'      => $item['label'] ?? '',
                                 'x'          => (int)$item['x'],

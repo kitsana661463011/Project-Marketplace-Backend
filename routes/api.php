@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\StallBookingController;
 use App\Http\Controllers\Api\StallController;
 use App\Http\Controllers\Api\MarketMapController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\ShopReviewController;
+use App\Http\Controllers\Api\ReviewReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('images/{filename}', function ($filename) {
@@ -49,6 +51,11 @@ Route::prefix('v1')->group(function () {
     Route::apiResource('stalls', StallController::class);
     Route::apiResource('stall-bookings', StallBookingController::class);
     Route::apiResource('payments', PaymentController::class);
+    Route::get('shop-reviews', [ShopReviewController::class, 'index']);
+    Route::post('shop-reviews', [ShopReviewController::class, 'store']);
+    Route::post('review-reports', [ReviewReportController::class, 'store']);
+    Route::post('problem-reports', [ProblemReportController::class, 'store']);
+    Route::get('problem-reports', [ProblemReportController::class, 'index']);
 
     Route::get('bookings', [BookingController::class, 'index']);
     Route::get('bookings/{booking_id}', [BookingController::class, 'show']);

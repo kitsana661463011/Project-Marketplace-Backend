@@ -23,6 +23,7 @@ class BookingController extends Controller
         $query = DB::table('stall_booking as sb')
             ->leftJoin('user as u', 'u.user_id', '=', 'sb.user_id')
             ->leftJoin('stall as s', 's.stall_id', '=', 'sb.stall_id')
+            ->leftJoin('market_zone as mz', 'mz.zone_id', '=', 's.zone_id')
             ->leftJoin('payment as p', 'p.booking_id', '=', 'sb.booking_id')
             ->select(
                 'sb.booking_id',
@@ -34,8 +35,11 @@ class BookingController extends Controller
                 'sb.status',
                 'u.username as user_name',
                 'u.email as user_email',
+                'u.phone as user_phone',
                 's.stall_number',
+                's.size as stall_size',
                 's.status as stall_status',
+                'mz.zone_name',
                 'p.payment_id',
                 'p.amount',
                 'p.payment_date',
@@ -63,6 +67,11 @@ class BookingController extends Controller
 
         if ($endDate) {
             $query->whereDate('sb.booking_date', '<=', $endDate);
+        }
+
+        $userId = $request->input('user_id');
+        if ($userId) {
+            $query->where('sb.user_id', $userId);
         }
 
         $status = $request->input('status');
@@ -341,6 +350,11 @@ class BookingController extends Controller
                 $payment = Payment::where('booking_id', $booking->booking_id)->first();
                 if ($payment) {
                     $payment->update(['status' => 'rejected']);
+                }
+
+                $stall = Stall::find($booking->stall_id);
+                if ($stall) {
+                    $stall->update(['status' => 'available']);
                 }
             });
         } catch (\Throwable $e) {

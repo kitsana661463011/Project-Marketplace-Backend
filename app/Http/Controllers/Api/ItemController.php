@@ -39,7 +39,7 @@ class ItemController extends Controller
             'item_name' => ['required', 'string', 'max:100'],
             'price' => ['required', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
-            'item_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
+            'item_image' => ['nullable'],
             'category_id' => ['required', 'integer', 'exists:item_category,category_id'],
         ]);
 
@@ -54,6 +54,8 @@ class ItemController extends Controller
         $imagePath = null;
         if ($request->hasFile('item_image')) {
             $imagePath = $this->uploadImage($request->file('item_image'));
+        } else if ($request->filled('item_image')) {
+            $imagePath = $request->input('item_image');
         }
 
         $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
@@ -106,7 +108,7 @@ class ItemController extends Controller
             'item_name' => ['sometimes', 'string', 'max:100'],
             'price' => ['sometimes', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
-            'item_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
+            'item_image' => ['nullable'],
             'category_id' => ['sometimes', 'integer', 'exists:item_category,category_id'],
         ]);
 
@@ -121,6 +123,8 @@ class ItemController extends Controller
         $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
         if ($request->hasFile('item_image')) {
             $data['item_image'] = $this->uploadImage($request->file('item_image'), $item->item_image);
+        } else if ($request->filled('item_image')) {
+            $data['item_image'] = $request->input('item_image');
         }
 
         $item->update($data);

@@ -83,6 +83,20 @@ class DashboardController extends Controller
                 ],
                 'overview_cards' => [
                     [
+                        'title' => 'แจ้งเตือนเหตุ',
+                        'value' => $pendingReports,
+                        'subValue' => '',
+                        'detail' => 'ต้องตรวจสอบทันที',
+                        'type' => 'report',
+                    ],
+                    [
+                        'title' => 'คำขอจองที่รออนุมัติ',
+                        'value' => $pendingBookings,
+                        'subValue' => '',
+                        'detail' => 'รอการตรวจสอบจากแอดมิน',
+                        'type' => 'booking',
+                    ],
+                    [
                         'title' => 'ล็อกที่มีคนจอง',
                         'value' => $occupiedStalls,
                         'subValue' => '/'.$totalStalls,
@@ -95,20 +109,6 @@ class DashboardController extends Controller
                         'subValue' => '',
                         'detail' => 'พร้อมเปิดให้จอง',
                         'type' => 'available',
-                    ],
-                    [
-                        'title' => 'คำขอจองที่รออนุมัติ',
-                        'value' => $pendingBookings,
-                        'subValue' => '',
-                        'detail' => 'รอการตรวจสอบจากแอดมิน',
-                        'type' => 'booking',
-                    ],
-                    [
-                        'title' => 'แจ้งเตือนเหตุ',
-                        'value' => $pendingReports,
-                        'subValue' => '',
-                        'detail' => 'ต้องตรวจสอบทันที',
-                        'type' => 'report',
                     ],
                 ],
                 'category_share' => $categoryShare,

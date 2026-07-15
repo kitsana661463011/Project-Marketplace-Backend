@@ -22,9 +22,15 @@ class ShopController extends Controller
         return $filename;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $shops = Shop::with(['category', 'owner'])->get();
+        $query = Shop::with(['category', 'owner']);
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->input('user_id'));
+        }
+
+        $shops = $query->get();
 
         return response()->json([
             'status' => true,
@@ -41,7 +47,7 @@ class ShopController extends Controller
             'description' => ['nullable', 'string'],
             'shop_phone' => ['nullable', 'string', 'max:15'],
             'social_links' => ['nullable', 'json'],
-            'shop_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
+            'shop_image' => ['nullable'],
             'user_id' => ['required', 'integer', 'exists:user,user_id'],
         ]);
 
@@ -56,6 +62,8 @@ class ShopController extends Controller
         $imagePath = null;
         if ($request->hasFile('shop_image')) {
             $imagePath = $this->uploadImage($request->file('shop_image'));
+        } else if ($request->filled('shop_image')) {
+            $imagePath = $request->input('shop_image');
         }
 
         $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
@@ -109,7 +117,7 @@ class ShopController extends Controller
             'description' => ['nullable', 'string'],
             'shop_phone' => ['nullable', 'string', 'max:15'],
             'social_links' => ['nullable', 'json'],
-            'shop_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:5120'],
+            'shop_image' => ['nullable'],
             'user_id' => ['sometimes', 'integer', 'exists:user,user_id'],
         ]);
 
@@ -124,6 +132,8 @@ class ShopController extends Controller
         $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
         if ($request->hasFile('shop_image')) {
             $data['shop_image'] = $this->uploadImage($request->file('shop_image'), $shop->shop_image);
+        } else if ($request->filled('shop_image')) {
+            $data['shop_image'] = $request->input('shop_image');
         }
 
         $shop->update($data);
