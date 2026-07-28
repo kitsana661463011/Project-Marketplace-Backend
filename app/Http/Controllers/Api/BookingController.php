@@ -15,7 +15,7 @@ class BookingController extends Controller
 {
     protected function getAllowedStatuses(): array
     {
-        return ['pending', 'pending_review', 'approved', 'cancelled'];
+        return ['pending', 'pending_review', 'approved', 'cancelled', 'refund_requested', 'refunded'];
     }
 
     public function index(Request $request)
@@ -33,6 +33,7 @@ class BookingController extends Controller
                 'sb.start_date',
                 'sb.end_date',
                 'sb.status',
+                'sb.reject_reason',
                 'u.username as user_name',
                 'u.email as user_email',
                 'u.phone as user_phone',
@@ -44,7 +45,13 @@ class BookingController extends Controller
                 'p.amount',
                 'p.payment_date',
                 'p.payment_slip',
-                'p.status as payment_status'
+                'p.status as payment_status',
+                'p.refund_reason',
+                'p.refund_bank_name',
+                'p.refund_account_number',
+                'p.refund_account_name',
+                'p.refund_slip',
+                'p.refunded_at'
             );
 
         $search = trim((string) $request->input('search', ''));
@@ -333,6 +340,7 @@ class BookingController extends Controller
 
         $validator = Validator::make($request->all(), [
             'note' => ['nullable', 'string', 'max:255'],
+            'reject_reason' => ['nullable', 'string', 'max:255'],
         ]);
 
         if ($validator->fails()) {
@@ -343,9 +351,14 @@ class BookingController extends Controller
             ], 422);
         }
 
+        $rejectReason = $request->input('reject_reason') ?? $request->input('note');
+
         try {
-            DB::transaction(function () use ($booking) {
-                $booking->update(['status' => 'cancelled']);
+            DB::transaction(function () use ($booking, $rejectReason) {
+                $booking->update([
+                    'status' => 'cancelled',
+                    'reject_reason' => $rejectReason,
+                ]);
 
                 $payment = Payment::where('booking_id', $booking->booking_id)->first();
                 if ($payment) {
@@ -371,6 +384,188 @@ class BookingController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Booking rejected successfully',
+            'data' => $booking,
+        ], 200);
+    }
+
+    public function requestRefund(Request $request, $booking_id)
+    {
+        $booking = StallBooking::find($booking_id);
+
+        if (! $booking) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Booking not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'refund_reason' => ['required', 'string', 'max:500'],
+            'refund_bank_name' => ['required', 'string', 'max:100'],
+            'refund_account_number' => ['required', 'string', 'max:50'],
+            'refund_account_name' => ['required', 'string', 'max:100'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed',
+                'data' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            DB::transaction(function () use ($booking, $request) {
+                $booking->update([
+                    'status' => 'refund_requested',
+                    'reject_reason' => $request->input('refund_reason'),
+                ]);
+
+                $payment = Payment::where('booking_id', $booking->booking_id)->first();
+                if ($payment) {
+                    $payment->update([
+                        'status' => 'refund_requested',
+                        'refund_reason' => $request->input('refund_reason'),
+                        'refund_bank_name' => $request->input('refund_bank_name'),
+                        'refund_account_number' => $request->input('refund_account_number'),
+                        'refund_account_name' => $request->input('refund_account_name'),
+                    ]);
+                } else {
+                    Payment::create([
+                        'booking_id' => $booking->booking_id,
+                        'amount' => 0,
+                        'payment_date' => now(),
+                        'status' => 'refund_requested',
+                        'refund_reason' => $request->input('refund_reason'),
+                        'refund_bank_name' => $request->input('refund_bank_name'),
+                        'refund_account_number' => $request->input('refund_account_number'),
+                        'refund_account_name' => $request->input('refund_account_name'),
+                    ]);
+                }
+
+                $stall = Stall::find($booking->stall_id);
+                if ($stall) {
+                    $stall->update(['status' => 'available']);
+                }
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Refund request failed',
+                'data' => $e->getMessage(),
+            ], 500);
+        }
+
+        $booking->refresh();
+        $booking->load(['user', 'stall', 'payment']);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Refund requested successfully',
+            'data' => $booking,
+        ], 200);
+    }
+
+    public function approveRefund(Request $request, $booking_id)
+    {
+        $booking = StallBooking::find($booking_id);
+
+        if (! $booking) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Booking not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'refund_slip' => ['nullable'],
+            'refund_slip_file' => ['nullable', 'image', 'mimes:png,jpg,jpeg', 'max:5120'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed',
+                'data' => $validator->errors(),
+            ], 422);
+        }
+
+        $refundSlipFilename = null;
+
+        if ($request->hasFile('refund_slip_file')) {
+            $file = $request->file('refund_slip_file');
+            $filename = time() . '_refund_slip.' . $file->getClientOriginalExtension();
+            $file->storeAs('', $filename, 'custom_images');
+            $refundSlipFilename = $filename;
+        } elseif ($request->hasFile('refund_slip')) {
+            $file = $request->file('refund_slip');
+            $filename = time() . '_refund_slip.' . $file->getClientOriginalExtension();
+            $file->storeAs('', $filename, 'custom_images');
+            $refundSlipFilename = $filename;
+        } elseif ($request->filled('refund_slip') && is_string($request->input('refund_slip'))) {
+            $refundSlipFilename = $request->input('refund_slip');
+        }
+
+        try {
+            DB::transaction(function () use ($booking, $request, $refundSlipFilename) {
+                $booking->update([
+                    'status' => 'refunded',
+                ]);
+
+                $payment = Payment::where('booking_id', $booking->booking_id)->first();
+                if ($payment) {
+                    $note = $request->input('note') ?? $request->input('remark');
+                    $updateData = [
+                        'status' => 'refunded',
+                        'refund_slip' => $refundSlipFilename ?? $payment->refund_slip,
+                        'refunded_at' => now(),
+                    ];
+
+                    if ($note) {
+                        if (Schema::hasColumn('payment', 'remark')) {
+                            $updateData['remark'] = $note;
+                        }
+                        if (empty($payment->refund_reason)) {
+                            $updateData['refund_reason'] = $note;
+                        }
+                    }
+
+                    $payment->update($updateData);
+
+                    DB::table('payment_history')->insert([
+                        'booking_id' => $booking->booking_id,
+                        'payment_id' => $payment->payment_id,
+                        'amount' => $payment->amount,
+                        'payment_date' => $payment->payment_date,
+                        'verified_date' => now(),
+                        'payment_method' => 'โอนเงินคืน (Refund)',
+                        'status' => 'refunded',
+                        'remark' => $note ?? $payment->refund_reason ?? 'คืนเงินค่าจองสำเร็จ',
+                    ]);
+                }
+
+                $stall = Stall::find($booking->stall_id);
+                if ($stall) {
+                    $stall->update(['status' => 'available']);
+                }
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Refunding failed',
+                'data' => $e->getMessage(),
+            ], 500);
+        }
+
+        $booking->refresh();
+        $booking->load(['user', 'stall', 'payment']);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Refund processed successfully',
             'data' => $booking,
         ], 200);
     }

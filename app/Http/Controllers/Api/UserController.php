@@ -109,6 +109,7 @@ class UserController extends Controller
             'status' => ['sometimes', Rule::in(['active', 'inactive', 'banned'])],
             'citizen_id' => ['nullable', 'string', 'max:20'],
             'address' => ['nullable', 'string'],
+            'interests' => ['nullable'],
             'document_status' => ['nullable', Rule::in(['pending', 'approved', 'rejected', 'request_more'])],
             'submission_date' => ['nullable', 'date'],
             'document_image' => ['nullable', 'string', 'max:255'],
@@ -122,7 +123,7 @@ class UserController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role', 'status', 'citizen_id', 'address', 'document_status', 'submission_date', 'document_image']);
+        $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role', 'status', 'citizen_id', 'address', 'interests', 'document_status', 'submission_date', 'document_image']);
 
         if ($request->filled('password')) {
             $data['password'] = bcrypt($request->password);

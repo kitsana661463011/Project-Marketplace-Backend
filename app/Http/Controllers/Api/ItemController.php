@@ -58,9 +58,34 @@ class ItemController extends Controller
             $imagePath = $request->input('item_image');
         }
 
+        $imagesList = [];
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                $imagesList[] = $this->uploadImage($file);
+            }
+        } else if ($request->filled('images')) {
+            $inputImages = $request->input('images');
+            if (is_string($inputImages)) {
+                $decoded = json_decode($inputImages, true);
+                $imagesList = is_array($decoded) ? $decoded : array_map('trim', explode(',', $inputImages));
+            } else if (is_array($inputImages)) {
+                $imagesList = $inputImages;
+            }
+        }
+
+        if (empty($imagesList) && $imagePath) {
+            $imagesList = [$imagePath];
+        }
+
         $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
         if ($imagePath) {
             $data['item_image'] = $imagePath;
+        }
+        if (!empty($imagesList)) {
+            $data['images'] = $imagesList;
+            if (empty($data['item_image'])) {
+                $data['item_image'] = $imagesList[0];
+            }
         }
 
         $item = Item::create($data);
@@ -109,6 +134,7 @@ class ItemController extends Controller
             'price' => ['sometimes', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'item_image' => ['nullable'],
+            'images' => ['nullable'],
             'category_id' => ['sometimes', 'integer', 'exists:item_category,category_id'],
         ]);
 
@@ -125,6 +151,22 @@ class ItemController extends Controller
             $data['item_image'] = $this->uploadImage($request->file('item_image'), $item->item_image);
         } else if ($request->filled('item_image')) {
             $data['item_image'] = $request->input('item_image');
+        }
+
+        if ($request->hasFile('images')) {
+            $imagesList = [];
+            foreach ($request->file('images') as $file) {
+                $imagesList[] = $this->uploadImage($file);
+            }
+            $data['images'] = $imagesList;
+        } else if ($request->filled('images')) {
+            $inputImages = $request->input('images');
+            if (is_string($inputImages)) {
+                $decoded = json_decode($inputImages, true);
+                $data['images'] = is_array($decoded) ? $decoded : array_map('trim', explode(',', $inputImages));
+            } else if (is_array($inputImages)) {
+                $data['images'] = $inputImages;
+            }
         }
 
         $item->update($data);

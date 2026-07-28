@@ -14,7 +14,6 @@ class MarketZone extends Model
 
     protected $fillable = [
         'zone_name',
-        'zone_price',
     ];
 
     public function stalls()

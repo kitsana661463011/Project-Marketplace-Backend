@@ -62,9 +62,8 @@ class MarketMapController extends Controller
 
         $zones = \App\Models\MarketZone::all()->map(function ($zone) {
             return [
-                'zone_id'    => $zone->zone_id,
-                'zone_name'  => $zone->zone_name,
-                'zone_price' => (float)$zone->zone_price,
+                'zone_id'   => $zone->zone_id,
+                'zone_name' => $zone->zone_name,
             ];
         });
 
@@ -145,10 +144,26 @@ class MarketMapController extends Controller
                     $isNew = !is_numeric($itemId) || str_starts_with((string)$itemId, 'new-');
 
                     $stallId = $item['stall_id'] ?? null;
+                    $zoneId = $item['zone_id'] ?? null;
+
+                    if ($item['item_type'] === 'zone') {
+                        $zoneName = trim($item['label'] ?? '');
+                        if (!empty($zoneName)) {
+                            $existingZone = \App\Models\MarketZone::where('zone_name', $zoneName)->first();
+                            if ($existingZone) {
+                                $zoneId = $existingZone->zone_id;
+                            } else {
+                                $newZone = \App\Models\MarketZone::create([
+                                    'zone_name' => $zoneName,
+                                ]);
+                                $zoneId = $newZone->zone_id;
+                            }
+                        }
+                    }
+
                     if ($item['item_type'] === 'block') {
                         // Check if we need to create a new Stall
                         if (!$stallId) {
-                            $zoneId = $item['zone_id'] ?? null;
                             if (!$zoneId) {
                                 $zoneId = \App\Models\MarketZone::first()?->zone_id ?? 1;
                             }
@@ -174,7 +189,7 @@ class MarketMapController extends Controller
                                     'stall_number' => $item['label'] ?? $stall->stall_number,
                                     'size'         => $item['size'] ?? $stall->size,
                                     'status'       => ($item['status'] ?? 'available') === 'repair' ? 'maintenance' : ($item['status'] ?? 'available'),
-                                    'zone_id'      => $item['zone_id'] ?? $stall->zone_id,
+                                    'zone_id'      => $zoneId ?? $stall->zone_id,
                                 ]);
                             }
                         }
@@ -185,7 +200,7 @@ class MarketMapController extends Controller
                             'map_id'     => $map->map_id,
                             'item_type'  => $item['item_type'],
                             'stall_id'   => $stallId,
-                            'zone_id'    => $item['zone_id'] ?? null,
+                            'zone_id'    => $zoneId,
                             'label'      => $item['label'] ?? '',
                             'x'          => (int)$item['x'],
                             'y'          => (int)$item['y'],
@@ -200,7 +215,7 @@ class MarketMapController extends Controller
                             ->update([
                                 'item_type'  => $item['item_type'],
                                 'stall_id'   => $stallId,
-                                'zone_id'    => $item['zone_id'] ?? null,
+                                'zone_id'    => $zoneId,
                                 'label'      => $item['label'] ?? '',
                                 'x'          => (int)$item['x'],
                                 'y'          => (int)$item['y'],

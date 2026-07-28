@@ -16,6 +16,7 @@ class Announcement extends Model
         'title',
         'announcement_type',
         'description',
+        'image',
         'publish_date',
         'status',
         'user_id',

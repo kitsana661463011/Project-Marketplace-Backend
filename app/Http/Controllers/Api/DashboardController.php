@@ -70,16 +70,66 @@ class DashboardController extends Controller
             ->take(3)
             ->values();
 
+        $totalRevenue = (float) DB::table('payment')->where('status', 'verified')->sum('amount');
+
+        $zoneSummary = DB::table('market_zone as mz')
+            ->leftJoin('stall as st', 'mz.zone_id', '=', 'st.zone_id')
+            ->select(
+                'mz.zone_id',
+                'mz.zone_name',
+                DB::raw('COUNT(st.stall_id) as total_stalls'),
+                DB::raw("COUNT(CASE WHEN st.status = 'occupied' THEN 1 END) as occupied_count"),
+                DB::raw("COUNT(CASE WHEN st.status = 'available' THEN 1 END) as available_count")
+            )
+            ->groupBy('mz.zone_id', 'mz.zone_name')
+            ->get();
+
+        $allInterestsOptions = DB::table('user_interest_option')->pluck('interest_name')->toArray();
+        $userInterestsRaw = DB::table('user')->whereNotNull('interests')->pluck('interests')->toArray();
+        $interestCounts = [];
+        foreach ($allInterestsOptions as $opt) {
+            $interestCounts[$opt] = 0;
+        }
+
+        $totalUsersWithInterests = 0;
+        foreach ($userInterestsRaw as $userIntStr) {
+            if (!empty($userIntStr)) {
+                $totalUsersWithInterests++;
+                $tags = array_map('trim', explode(',', $userIntStr));
+                foreach ($tags as $tag) {
+                    if (!empty($tag)) {
+                        if (!isset($interestCounts[$tag])) {
+                            $interestCounts[$tag] = 0;
+                        }
+                        $interestCounts[$tag]++;
+                    }
+                }
+            }
+        }
+
+        arsort($interestCounts);
+        $userInterestsFormatted = [];
+        $totalSelections = array_sum($interestCounts);
+        foreach ($interestCounts as $name => $count) {
+            $userInterestsFormatted[] = [
+                'name' => $name,
+                'count' => $count,
+                'percentage' => $totalSelections > 0 ? round(($count / $totalSelections) * 100, 1) : 0,
+            ];
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Dashboard overview retrieved successfully',
             'data' => [
                 'summary' => [
+                    'total_revenue' => $totalRevenue,
                     'total_stalls' => $totalStalls,
                     'occupied_stalls' => $occupiedStalls,
                     'available_stalls' => $availableStalls,
                     'pending_bookings' => $pendingBookings,
                     'pending_reports' => $pendingReports,
+                    'total_users_with_interests' => $totalUsersWithInterests,
                 ],
                 'overview_cards' => [
                     [
@@ -112,21 +162,56 @@ class DashboardController extends Controller
                     ],
                 ],
                 'category_share' => $categoryShare,
+                'user_interests' => $userInterestsFormatted,
+                'zone_summary' => $zoneSummary,
                 'recent_activity' => $recentActivity,
             ],
         ], 200);
+    }
+
+    public function getUserInterests()
+    {
+        $options = DB::table('user_interest_option')->orderBy('interest_id')->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $options->pluck('interest_name'),
+        ], 200);
+    }
+
+    public function storeUserInterest(\Illuminate\Http\Request $request)
+    {
+        $request->validate([
+            'interest_name' => 'required|string|max:100',
+        ]);
+
+        $name = trim($request->input('interest_name'));
+
+        $exists = DB::table('user_interest_option')->where('interest_name', $name)->exists();
+        if (!$exists) {
+            DB::table('user_interest_option')->insert([
+                'interest_name' => $name,
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'User interest option added successfully',
+        ], 201);
     }
 
     public function badgeCounts()
     {
         $pendingBookings = (int) StallBooking::where('status', 'pending')->count();
         $pendingReports  = (int) ProblemReport::where('status', 'pending')->count();
+        $pendingSellers  = (int) DB::table('user')->where('document_status', 'pending')->count();
 
         return response()->json([
             'status' => true,
             'data'   => [
                 'verifications' => $pendingBookings,
                 'reports'       => $pendingReports,
+                'sellers'       => $pendingSellers,
             ],
         ], 200);
     }

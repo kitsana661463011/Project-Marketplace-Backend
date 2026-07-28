@@ -18,12 +18,20 @@ use App\Http\Controllers\Api\ReviewReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('images/{filename}', function ($filename) {
-    $path = 'F:/Project-MarketPlace/admin/backend/storage/images/' . $filename;
-    if (!file_exists($path)) {
-        abort(404);
+    $path = storage_path('images/' . $filename);
+    if (file_exists($path)) {
+        return response()->file($path);
     }
-    return response()->file($path);
-});
+    $pathPublic = storage_path('app/public/' . $filename);
+    if (file_exists($pathPublic)) {
+        return response()->file($pathPublic);
+    }
+    $pathApp = storage_path('app/' . $filename);
+    if (file_exists($pathApp)) {
+        return response()->file($pathApp);
+    }
+    abort(404);
+})->where('filename', '.*');
 
 Route::prefix('admin')->group(function () {
     Route::get('sellers', [SellerManagementController::class, 'index']);
@@ -35,7 +43,7 @@ Route::prefix('admin')->group(function () {
 
     Route::get('announcements', [AnnouncementController::class, 'index']);
     Route::post('announcements', [AnnouncementController::class, 'store']);
-    Route::put('announcements/{id}', [AnnouncementController::class, 'update']);
+    Route::match(['put', 'post'], 'announcements/{id}', [AnnouncementController::class, 'update']);
     Route::delete('announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::patch('announcements/{id}/toggle-status', [AnnouncementController::class, 'toggleStatus']);
 });
@@ -66,6 +74,8 @@ Route::prefix('v1')->group(function () {
     Route::put('bookings/{booking_id}/pending', [BookingController::class, 'pending']);
     Route::put('bookings/{booking_id}/hold', [BookingController::class, 'hold']);
     Route::put('bookings/{booking_id}/reject', [BookingController::class, 'reject']);
+    Route::put('bookings/{booking_id}/request-refund', [BookingController::class, 'requestRefund']);
+    Route::match(['put', 'post'], 'bookings/{booking_id}/approve-refund', [BookingController::class, 'approveRefund']);
 
     Route::get('admin/sellers', [SellerManagementController::class, 'index']);
     Route::get('admin/sellers/pending', [SellerManagementController::class, 'pending']);
@@ -76,7 +86,7 @@ Route::prefix('v1')->group(function () {
 
     Route::get('admin/announcements', [AnnouncementController::class, 'index']);
     Route::post('admin/announcements', [AnnouncementController::class, 'store']);
-    Route::put('admin/announcements/{id}', [AnnouncementController::class, 'update']);
+    Route::match(['put', 'post'], 'admin/announcements/{id}', [AnnouncementController::class, 'update']);
     Route::delete('admin/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::patch('admin/announcements/{id}/toggle-status', [AnnouncementController::class, 'toggleStatus']);
 });

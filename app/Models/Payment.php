@@ -18,6 +18,13 @@ class Payment extends Model
         'payment_date',
         'payment_slip',
         'status',
+        'refund_reason',
+        'refund_bank_name',
+        'refund_account_number',
+        'refund_account_name',
+        'refund_slip',
+        'refunded_at',
+        'remark',
     ];
 
     public function booking()

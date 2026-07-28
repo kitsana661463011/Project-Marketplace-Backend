@@ -15,7 +15,7 @@ return new class extends Migration
             $table->dateTime('booking_date')->useCurrent();
             $table->date('start_date');
             $table->date('end_date');
-            $table->enum('status', ['pending', 'approved', 'cancelled'])->default('pending');
+            $table->enum('status', ['pending', 'approved', 'refund_requested', 'refunded'])->default('pending');
             $table->primary('booking_id');
             $table->foreign('user_id')->references('user_id')->on('user')->onDelete('cascade')->onUpdate('cascade');
             $table->foreign('stall_id')->references('stall_id')->on('stall')->onUpdate('cascade');

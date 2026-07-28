@@ -19,6 +19,7 @@ class StallBooking extends Model
         'start_date',
         'end_date',
         'status',
+        'reject_reason',
     ];
 
     public function user()

@@ -31,7 +31,13 @@ class PaymentController extends Controller
             'amount' => ['required', 'numeric', 'min:0'],
             'payment_date' => ['nullable', 'date'],
             'payment_slip' => ['nullable', 'string', 'max:255'],
-            'status' => ['required', Rule::in(['pending', 'verified', 'rejected'])],
+            'status' => ['required', Rule::in(['pending', 'verified', 'rejected', 'refund_requested', 'refunded'])],
+            'refund_reason' => ['nullable', 'string'],
+            'refund_bank_name' => ['nullable', 'string', 'max:100'],
+            'refund_account_number' => ['nullable', 'string', 'max:50'],
+            'refund_account_name' => ['nullable', 'string', 'max:100'],
+            'refund_slip' => ['nullable', 'string', 'max:255'],
+            'refunded_at' => ['nullable', 'date'],
         ]);
 
         if ($validator->fails()) {
@@ -42,7 +48,10 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        $payment = Payment::create($request->only(['booking_id', 'amount', 'payment_date', 'payment_slip', 'status']));
+        $payment = Payment::create($request->only([
+            'booking_id', 'amount', 'payment_date', 'payment_slip', 'status',
+            'refund_reason', 'refund_bank_name', 'refund_account_number', 'refund_account_name', 'refund_slip', 'refunded_at'
+        ]));
 
         return response()->json([
             'status' => true,
@@ -87,7 +96,13 @@ class PaymentController extends Controller
             'amount' => ['sometimes', 'numeric', 'min:0'],
             'payment_date' => ['nullable', 'date'],
             'payment_slip' => ['nullable', 'string', 'max:255'],
-            'status' => ['sometimes', Rule::in(['pending', 'verified', 'rejected'])],
+            'status' => ['sometimes', Rule::in(['pending', 'verified', 'rejected', 'refund_requested', 'refunded'])],
+            'refund_reason' => ['nullable', 'string'],
+            'refund_bank_name' => ['nullable', 'string', 'max:100'],
+            'refund_account_number' => ['nullable', 'string', 'max:50'],
+            'refund_account_name' => ['nullable', 'string', 'max:100'],
+            'refund_slip' => ['nullable', 'string', 'max:255'],
+            'refunded_at' => ['nullable', 'date'],
         ]);
 
         if ($validator->fails()) {
@@ -98,7 +113,10 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        $payment->update($request->only(['booking_id', 'amount', 'payment_date', 'payment_slip', 'status']));
+        $payment->update($request->only([
+            'booking_id', 'amount', 'payment_date', 'payment_slip', 'status',
+            'refund_reason', 'refund_bank_name', 'refund_account_number', 'refund_account_name', 'refund_slip', 'refunded_at'
+        ]));
 
         return response()->json([
             'status' => true,

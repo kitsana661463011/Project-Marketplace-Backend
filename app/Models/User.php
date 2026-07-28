@@ -37,6 +37,7 @@ class User extends Authenticatable
         'submission_date',
         'document_image',
         'address',
+        'interests',
     ];
 
     /**

@@ -18,17 +18,11 @@ class AnnouncementController extends Controller
             $query->where('title', 'like', "%{$search}%");
         }
 
-        $announcements = $query->orderByDesc('publish_date')->get()->map(function (Announcement $announcement) {
-            return [
-                'announcement_id' => $announcement->announcement_id,
-                'title' => $announcement->title,
-                'announcement_type' => $announcement->announcement_type,
-                'description' => $announcement->description,
-                'publish_date' => $this->serializeDate($announcement->publish_date),
-                'status' => $announcement->status,
-                'user_id' => $announcement->user_id,
-                'user_name' => $announcement->user?->username,
-            ];
+        $announcements = $query
+            ->orderByRaw("CASE WHEN announcement_type = 'urgent' THEN 0 WHEN announcement_type = 'activity' THEN 1 ELSE 2 END")
+            ->orderByDesc('publish_date')
+            ->get()->map(function (Announcement $announcement) {
+            return $this->formatAnnouncement($announcement);
         });
 
         return response()->json([
@@ -44,8 +38,9 @@ class AnnouncementController extends Controller
             'title' => ['required', 'string', 'max:100'],
             'announcement_type' => ['required', 'in:urgent,activity,general'],
             'description' => ['nullable', 'string'],
+            'image' => ['nullable'],
             'status' => ['nullable', 'in:active,inactive'],
-            'user_id' => ['required', 'integer', 'exists:user,user_id'],
+            'user_id' => ['nullable', 'integer'],
         ]);
 
         if ($validator->fails()) {
@@ -56,14 +51,30 @@ class AnnouncementController extends Controller
             ], 422);
         }
 
-        $announcement = Announcement::create([
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $filename = time() . '_announcement.' . $file->getClientOriginalExtension();
+            $file->storeAs('', $filename, 'custom_images');
+            $imagePath = $filename;
+        } elseif ($request->filled('image')) {
+            $imagePath = $request->input('image');
+        }
+
+        $createData = [
             'title' => $request->input('title'),
             'announcement_type' => $request->input('announcement_type'),
             'description' => $request->input('description'),
             'publish_date' => now(),
             'status' => $request->input('status', 'active'),
-            'user_id' => $request->input('user_id'),
-        ]);
+            'user_id' => $request->input('user_id', 1),
+        ];
+
+        if ($imagePath !== null && \Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image')) {
+            $createData['image'] = $imagePath;
+        }
+
+        $announcement = Announcement::create($createData);
 
         return response()->json([
             'status' => true,
@@ -78,6 +89,7 @@ class AnnouncementController extends Controller
             'title' => ['sometimes', 'string', 'max:100'],
             'announcement_type' => ['sometimes', 'in:urgent,activity,general'],
             'description' => ['nullable', 'string'],
+            'image' => ['nullable'],
             'status' => ['sometimes', 'in:active,inactive'],
         ]);
 
@@ -100,6 +112,24 @@ class AnnouncementController extends Controller
         }
 
         $announcement->fill($request->only(['title', 'announcement_type', 'description', 'status']));
+
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image') && $announcement->image && !str_starts_with($announcement->image, 'http')) {
+                \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($announcement->image);
+            }
+            $file = $request->file('image');
+            $filename = time() . '_announcement.' . $file->getClientOriginalExtension();
+            $file->storeAs('', $filename, 'custom_images');
+            $imagePath = $filename;
+        } elseif ($request->filled('image')) {
+            $imagePath = $request->input('image');
+        }
+
+        if ($imagePath !== null && \Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image')) {
+            $announcement->image = $imagePath;
+        }
+
         $announcement->save();
 
         return response()->json([
@@ -154,11 +184,14 @@ class AnnouncementController extends Controller
 
     protected function formatAnnouncement(Announcement $announcement): array
     {
+        $imageVal = \Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image') ? $announcement->image : null;
+
         return [
             'announcement_id' => $announcement->announcement_id,
             'title' => $announcement->title,
             'announcement_type' => $announcement->announcement_type,
             'description' => $announcement->description,
+            'image' => $imageVal,
             'publish_date' => $this->serializeDate($announcement->publish_date),
             'status' => $announcement->status,
             'user_id' => $announcement->user_id,

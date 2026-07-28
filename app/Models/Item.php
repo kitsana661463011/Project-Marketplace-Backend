@@ -18,7 +18,12 @@ class Item extends Model
         'price',
         'description',
         'item_image',
+        'images',
         'category_id',
+    ];
+
+    protected $casts = [
+        'images' => 'array',
     ];
 
     public function shop()
