@@ -7,6 +7,7 @@ use App\Models\ProblemReport;
 use App\Models\Stall;
 use App\Models\StallBooking;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
 {
@@ -17,55 +18,67 @@ class DashboardController extends Controller
         $availableStalls = (int) Stall::where('status', 'available')->count();
         $pendingBookings = (int) StallBooking::where('status', 'pending')->count();
         $pendingReports = (int) ProblemReport::where('status', 'pending')->count();
+        $totalSellers = (int) DB::table('user')->where('role', 'seller')->where('document_status', 'approved')->count();
+        $pendingSellers = (int) DB::table('user')->where('document_status', 'pending')->where(function ($q) {
+            $q->where('role', 'buyer')->orWhere('role', 'seller');
+        })->count();
 
-        $categoryShare = DB::table('shop as s')
-            ->join('shop_category as sc', 's.category_id', '=', 'sc.category_id')
-            ->select('s.category_id as id', 'sc.category_name as name', DB::raw('COUNT(*) as count'))
-            ->groupBy('s.category_id', 'sc.category_name')
+        $totalShopsCount = (int) DB::table('shop')->count();
+        $categoryShare = DB::table('shop_category as sc')
+            ->leftJoin('shop as s', 'sc.category_id', '=', 's.category_id')
+            ->select('sc.category_id as id', 'sc.category_name as name', DB::raw('COUNT(s.shop_id) as count'))
+            ->groupBy('sc.category_id', 'sc.category_name')
             ->orderByDesc('count')
             ->get()
-            ->map(function ($item) use ($totalStalls) {
-                $item->percentage = $item->count > 0 ? round(($item->count / max($totalStalls, 1)) * 100, 1) : 0;
-
+            ->map(function ($item) use ($totalShopsCount) {
+                $c = (int) $item->count;
+                $item->count = $c;
+                $item->percentage = $totalShopsCount > 0 ? round(($c / $totalShopsCount) * 100, 1) : 0;
                 return $item;
             });
 
-        $bookings = DB::table('stall_booking as sb')
-            ->join('user as u', 'sb.user_id', '=', 'u.user_id')
-            ->join('stall as st', 'sb.stall_id', '=', 'st.stall_id')
+        $monthlyBookings = DB::table('stall_booking')
             ->select(
-                'sb.booking_id as id',
-                DB::raw("'booking' as type"),
-                DB::raw("CONCAT('คำขอจองบูธ ', st.stall_number) as title"),
-                DB::raw("CONCAT(u.username, ' / ', st.stall_number) as owner"),
-                'sb.status',
-                'sb.booking_date as created_at',
-                DB::raw("CASE WHEN sb.status = 'approved' THEN 'สำเร็จ (Approved)' WHEN sb.status = 'pending' THEN 'รออนุมัติ (Pending)' ELSE 'ยกเลิก (Cancelled)' END as status_label"),
-                DB::raw("CONCAT('คำขอจอง ', st.stall_number, ' โดย ', u.username) as message")
+                DB::raw("DATE_FORMAT(booking_date, '%b') as month"),
+                DB::raw('COUNT(booking_id) as count')
             )
-            ->orderByDesc('sb.booking_date')
-            ->limit(3)
+            ->groupBy(DB::raw("DATE_FORMAT(booking_date, '%b')"))
+            ->orderBy(DB::raw("MIN(booking_date)"))
             ->get();
 
-        $shops = DB::table('shop as s')
-            ->join('user as u', 's.user_id', '=', 'u.user_id')
-            ->select(
-                's.shop_id as id',
-                DB::raw("'shop' as type"),
-                DB::raw("CONCAT('ร้าน ', s.shop_name) as title"),
-                DB::raw("CONCAT(u.username, ' / ', s.shop_name) as owner"),
-                DB::raw("'approved' as status"),
-                DB::raw('COALESCE(u.created_at, NOW()) as created_at'),
-                DB::raw("'สำเร็จ (Approved)' as status_label"),
-                DB::raw("CONCAT('ร้าน ', s.shop_name, ' สมัครเข้ามาใหม่') as message")
-            )
-            ->orderByDesc('u.created_at')
-            ->limit(3)
-            ->get();
+        $bookings = StallBooking::with(['user', 'stall'])
+            ->orderByDesc('booking_id')
+            ->take(3)
+            ->get()
+            ->map(function ($booking) {
+                return [
+                    'id' => 'booking-' . $booking->booking_id,
+                    'type' => 'booking',
+                    'title' => 'การจองแผง ' . ($booking->stall ? $booking->stall->stall_number : 'ไม่ระบุ'),
+                    'description' => 'ผู้ขอจอง: ' . ($booking->user ? $booking->user->username : 'ไม่ระบุ'),
+                    'timestamp' => $booking->booking_date,
+                    'status' => $booking->status,
+                ];
+            });
+
+        $shops = DB::table('shop')
+            ->orderByDesc('shop_id')
+            ->take(3)
+            ->get()
+            ->map(function ($shop) {
+                return [
+                    'id' => 'shop-' . $shop->shop_id,
+                    'type' => 'shop',
+                    'title' => 'เปิดร้านค้าใหม่: ' . $shop->shop_name,
+                    'description' => 'รายละเอียด: ' . ($shop->description ?: 'ไม่มีรายละเอียด'),
+                    'timestamp' => now()->toDateTimeString(),
+                    'status' => 'approved',
+                ];
+            });
 
         $recentActivity = $bookings->merge($shops)
             ->sortByDesc(function ($item) {
-                return $item->created_at;
+                return $item['timestamp'];
             })
             ->take(3)
             ->values();
@@ -84,38 +97,52 @@ class DashboardController extends Controller
             ->groupBy('mz.zone_id', 'mz.zone_name')
             ->get();
 
-        $allInterestsOptions = DB::table('user_interest_option')->pluck('interest_name')->toArray();
-        $userInterestsRaw = DB::table('user')->whereNotNull('interests')->pluck('interests')->toArray();
-        $interestCounts = [];
-        foreach ($allInterestsOptions as $opt) {
-            $interestCounts[$opt] = 0;
-        }
-
+        $userInterestsFormatted = [];
         $totalUsersWithInterests = 0;
-        foreach ($userInterestsRaw as $userIntStr) {
-            if (!empty($userIntStr)) {
-                $totalUsersWithInterests++;
-                $tags = array_map('trim', explode(',', $userIntStr));
-                foreach ($tags as $tag) {
-                    if (!empty($tag)) {
-                        if (!isset($interestCounts[$tag])) {
-                            $interestCounts[$tag] = 0;
+        try {
+            if (Schema::hasTable('user_interest_option')) {
+                $allInterestsOptions = DB::table('user_interest_option')->pluck('interest_name', 'interest_id')->toArray();
+                $interestCounts = [];
+                foreach ($allInterestsOptions as $name) {
+                    $interestCounts[$name] = 0;
+                }
+
+                if (Schema::hasTable('user_has_interest')) {
+                    $userInterestsRaw = DB::table('user_has_interest as uhi')
+                        ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')
+                        ->select('uio.interest_name', DB::raw('COUNT(uhi.user_id) as count'))
+                        ->groupBy('uio.interest_id', 'uio.interest_name')
+                        ->get();
+
+                    foreach ($userInterestsRaw as $row) {
+                        $interestCounts[$row->interest_name] = (int)$row->count;
+                    }
+                } elseif (Schema::hasColumn('user', 'interests')) {
+                    $userInterestsRaw = DB::table('user')->whereNotNull('interests')->pluck('interests')->toArray();
+                    foreach ($userInterestsRaw as $userIntStr) {
+                        if (!empty($userIntStr)) {
+                            $tags = array_map('trim', explode(',', $userIntStr));
+                            foreach ($tags as $tag) {
+                                if (!empty($tag) && isset($interestCounts[$tag])) {
+                                    $interestCounts[$tag]++;
+                                }
+                            }
                         }
-                        $interestCounts[$tag]++;
                     }
                 }
-            }
-        }
 
-        arsort($interestCounts);
-        $userInterestsFormatted = [];
-        $totalSelections = array_sum($interestCounts);
-        foreach ($interestCounts as $name => $count) {
-            $userInterestsFormatted[] = [
-                'name' => $name,
-                'count' => $count,
-                'percentage' => $totalSelections > 0 ? round(($count / $totalSelections) * 100, 1) : 0,
-            ];
+                arsort($interestCounts);
+                $totalSelections = array_sum($interestCounts);
+                foreach ($interestCounts as $name => $count) {
+                    $userInterestsFormatted[] = [
+                        'name' => $name,
+                        'count' => $count,
+                        'percentage' => $totalSelections > 0 ? round(($count / $totalSelections) * 100, 1) : 0,
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            $userInterestsFormatted = [];
         }
 
         return response()->json([
@@ -129,6 +156,8 @@ class DashboardController extends Controller
                     'available_stalls' => $availableStalls,
                     'pending_bookings' => $pendingBookings,
                     'pending_reports' => $pendingReports,
+                    'total_sellers' => $totalSellers,
+                    'pending_sellers' => $pendingSellers,
                     'total_users_with_interests' => $totalUsersWithInterests,
                 ],
                 'overview_cards' => [
@@ -169,6 +198,40 @@ class DashboardController extends Controller
         ], 200);
     }
 
+    public function getCategories()
+    {
+        $categories = DB::table('shop_category')->orderBy('category_id')->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => $categories,
+        ], 200);
+    }
+
+    public function storeCategory(\Illuminate\Http\Request $request)
+    {
+        $request->validate([
+            'category_name' => 'required|string|max:100',
+            'description' => 'nullable|string',
+        ]);
+
+        $name = trim($request->input('category_name'));
+        $desc = trim((string) $request->input('description'));
+
+        $exists = DB::table('shop_category')->where('category_name', $name)->first();
+        if (! $exists) {
+            DB::table('shop_category')->insert([
+                'category_name' => $name,
+                'description' => $desc,
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Category added successfully',
+        ], 201);
+    }
+
     public function getUserInterests()
     {
         $options = DB::table('user_interest_option')->orderBy('interest_id')->get();
@@ -188,7 +251,7 @@ class DashboardController extends Controller
         $name = trim($request->input('interest_name'));
 
         $exists = DB::table('user_interest_option')->where('interest_name', $name)->exists();
-        if (!$exists) {
+        if (! $exists) {
             DB::table('user_interest_option')->insert([
                 'interest_name' => $name,
             ]);

@@ -12,7 +12,15 @@ class UserController extends Controller
 {
     public function index()
     {
-        $users = User::all();
+        $users = User::all()->map(function ($u) {
+            $arr = $u->toArray();
+            $arr['interests'] = \Illuminate\Support\Facades\DB::table('user_has_interest as uhi')
+                ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')
+                ->where('uhi.user_id', $u->user_id)
+                ->pluck('uio.interest_name')
+                ->toArray();
+            return $arr;
+        });
 
         return response()->json([
             'status' => true,
@@ -61,6 +69,26 @@ class UserController extends Controller
             'document_image' => $request->document_image,
         ]);
 
+        if ($request->has('interests') && !empty($request->interests)) {
+            $interestsRaw = $request->interests;
+            $interestNames = is_array($interestsRaw)
+                ? $interestsRaw
+                : array_map('trim', explode(',', (string) $interestsRaw));
+
+            foreach ($interestNames as $name) {
+                if (empty($name)) continue;
+                $opt = \Illuminate\Support\Facades\DB::table('user_interest_option')
+                    ->where('interest_name', $name)
+                    ->first();
+                if ($opt) {
+                    \Illuminate\Support\Facades\DB::table('user_has_interest')->insertOrIgnore([
+                        'user_id' => $user->user_id,
+                        'interest_id' => $opt->interest_id,
+                    ]);
+                }
+            }
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'User created successfully',
@@ -80,10 +108,17 @@ class UserController extends Controller
             ], 404);
         }
 
+        $arr = $user->toArray();
+        $arr['interests'] = \Illuminate\Support\Facades\DB::table('user_has_interest as uhi')
+            ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')
+            ->where('uhi.user_id', $user->user_id)
+            ->pluck('uio.interest_name')
+            ->toArray();
+
         return response()->json([
             'status' => true,
             'message' => 'User retrieved successfully',
-            'data' => $user,
+            'data' => $arr,
         ], 200);
     }
 
@@ -123,7 +158,46 @@ class UserController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role', 'status', 'citizen_id', 'address', 'interests', 'document_status', 'submission_date', 'document_image']);
+        $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role', 'status', 'citizen_id', 'address', 'document_status', 'submission_date', 'document_image']);
+
+        $userInterests = null;
+        if ($request->has('interests')) {
+            $userInterests = [];
+            $interestsRaw = $request->input('interests');
+            $interestNames = is_array($interestsRaw)
+                ? $interestsRaw
+                : array_map('trim', explode(',', (string) $interestsRaw));
+
+            \Illuminate\Support\Facades\DB::table('user_has_interest')
+                ->where('user_id', $user->user_id)
+                ->delete();
+
+            foreach ($interestNames as $name) {
+                if (empty($name)) continue;
+                $userInterests[] = $name;
+                $opt = \Illuminate\Support\Facades\DB::table('user_interest_option')
+                    ->where('interest_name', $name)
+                    ->first();
+                if ($opt) {
+                    \Illuminate\Support\Facades\DB::table('user_has_interest')->insertOrIgnore([
+                        'user_id' => $user->user_id,
+                        'interest_id' => $opt->interest_id,
+                    ]);
+                }
+            }
+        }
+
+        if ($request->hasFile('profile_image_file')) {
+            $file = $request->file('profile_image_file');
+            $filename = time() . '_profile_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $file->move(storage_path('images'), $filename);
+            $data['profile_image'] = $filename;
+        } elseif ($request->hasFile('profile_image')) {
+            $file = $request->file('profile_image');
+            $filename = time() . '_profile_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $file->move(storage_path('images'), $filename);
+            $data['profile_image'] = $filename;
+        }
 
         if ($request->filled('password')) {
             $data['password'] = bcrypt($request->password);
@@ -131,10 +205,21 @@ class UserController extends Controller
 
         $user->update($data);
 
+        $freshUser = $user->fresh()->toArray();
+        if ($userInterests !== null) {
+            $freshUser['interests'] = $userInterests;
+        } else {
+            $freshUser['interests'] = \Illuminate\Support\Facades\DB::table('user_has_interest as uhi')
+                ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')
+                ->where('uhi.user_id', $user->user_id)
+                ->pluck('uio.interest_name')
+                ->toArray();
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'User updated successfully',
-            'data' => $user->fresh(),
+            'data' => $freshUser,
         ], 200);
     }
 

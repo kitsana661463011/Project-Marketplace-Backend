@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\StallBookingController;
 use App\Http\Controllers\Api\StallController;
 use App\Http\Controllers\Api\MarketMapController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\FollowShopController;
 use App\Http\Controllers\Api\ShopReviewController;
 use App\Http\Controllers\Api\ReviewReportController;
 use Illuminate\Support\Facades\Route;
@@ -49,8 +50,15 @@ Route::prefix('admin')->group(function () {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::get('followed-shops', [FollowShopController::class, 'index']);
+    Route::post('followed-shops/toggle', [FollowShopController::class, 'toggle']);
+    Route::get('followed-shops/check', [FollowShopController::class, 'check']);
     Route::get('dashboard/overview', [DashboardController::class, 'overview']);
     Route::get('dashboard/badge-counts', [DashboardController::class, 'badgeCounts']);
+    Route::get('categories', [DashboardController::class, 'getCategories']);
+    Route::post('categories', [DashboardController::class, 'storeCategory']);
+    Route::get('user-interests', [DashboardController::class, 'getUserInterests']);
+    Route::post('user-interests', [DashboardController::class, 'storeUserInterest']);
     Route::get('maps/{id}', [MarketMapController::class, 'show']);
     Route::put('maps/{id}/items', [MarketMapController::class, 'saveItems']);
     Route::apiResource('users', UserController::class);

@@ -15,10 +15,14 @@ class Stall extends Model
     protected $fillable = [
         'stall_number',
         'size',
+        'price',
+        'rental_type',
+        'daily_price',
+        'monthly_price',
+        'entry_fee',
+        'security_deposit',
         'status',
         'zone_id',
-        'start_date',
-        'end_date',
     ];
 
     public function zone()

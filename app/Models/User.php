@@ -37,7 +37,6 @@ class User extends Authenticatable
         'submission_date',
         'document_image',
         'address',
-        'interests',
     ];
 
     /**
@@ -67,5 +66,10 @@ class User extends Authenticatable
     public function stallBookings()
     {
         return $this->hasMany(StallBooking::class, 'user_id', 'user_id');
+    }
+
+    public function shop()
+    {
+        return $this->hasOne(Shop::class, 'user_id', 'user_id');
     }
 }

@@ -15,7 +15,7 @@ class BookingController extends Controller
 {
     protected function getAllowedStatuses(): array
     {
-        return ['pending', 'pending_review', 'approved', 'cancelled', 'refund_requested', 'refunded'];
+        return ['pending', 'pending_review', 'approved', 'cancelled', 'refund_requested', 'refunded', 'renewal_pending'];
     }
 
     public function index(Request $request)
@@ -29,6 +29,12 @@ class BookingController extends Controller
                 'sb.booking_id',
                 'sb.user_id',
                 'sb.stall_id',
+                'sb.rental_type',
+                'sb.daily_price',
+                'sb.monthly_price',
+                'sb.entry_fee',
+                'sb.security_deposit',
+                'sb.total_amount',
                 'sb.booking_date',
                 'sb.start_date',
                 'sb.end_date',
@@ -40,6 +46,11 @@ class BookingController extends Controller
                 's.stall_number',
                 's.size as stall_size',
                 's.status as stall_status',
+                's.rental_type as stall_rental_type',
+                's.daily_price as stall_daily_price',
+                's.monthly_price as stall_monthly_price',
+                's.entry_fee as stall_entry_fee',
+                's.security_deposit as stall_security_deposit',
                 'mz.zone_name',
                 'p.payment_id',
                 'p.amount',
@@ -534,17 +545,6 @@ class BookingController extends Controller
                     }
 
                     $payment->update($updateData);
-
-                    DB::table('payment_history')->insert([
-                        'booking_id' => $booking->booking_id,
-                        'payment_id' => $payment->payment_id,
-                        'amount' => $payment->amount,
-                        'payment_date' => $payment->payment_date,
-                        'verified_date' => now(),
-                        'payment_method' => 'โอนเงินคืน (Refund)',
-                        'status' => 'refunded',
-                        'remark' => $note ?? $payment->refund_reason ?? 'คืนเงินค่าจองสำเร็จ',
-                    ]);
                 }
 
                 $stall = Stall::find($booking->stall_id);

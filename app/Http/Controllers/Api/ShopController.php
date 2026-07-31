@@ -12,12 +12,13 @@ class ShopController extends Controller
 {
     private function uploadImage($file, $oldImage = null)
     {
-        if ($oldImage) {
-            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($oldImage);
+        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
+            @unlink(storage_path('images/' . $oldImage));
         }
 
-        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-        $file->storeAs('', $filename, 'custom_images');
+        $ext = $file->getClientOriginalExtension() ?: 'png';
+        $filename = time() . '_shop_' . uniqid() . '.' . $ext;
+        $file->move(storage_path('images'), $filename);
 
         return $filename;
     }
@@ -130,7 +131,9 @@ class ShopController extends Controller
         }
 
         $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
-        if ($request->hasFile('shop_image')) {
+        if ($request->hasFile('shop_image_file')) {
+            $data['shop_image'] = $this->uploadImage($request->file('shop_image_file'), $shop->shop_image);
+        } else if ($request->hasFile('shop_image')) {
             $data['shop_image'] = $this->uploadImage($request->file('shop_image'), $shop->shop_image);
         } else if ($request->filled('shop_image')) {
             $data['shop_image'] = $request->input('shop_image');

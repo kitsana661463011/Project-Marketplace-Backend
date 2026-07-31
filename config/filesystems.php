@@ -62,7 +62,7 @@ return [
 
         'custom_images' => [
             'driver' => 'local',
-            'root' => 'F:/Project-MarketPlace/admin/backend/storage/images',
+            'root' => storage_path('images'),
             'throw' => false,
             'report' => false,
         ],

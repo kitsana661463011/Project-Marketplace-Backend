@@ -15,6 +15,12 @@ class StallBooking extends Model
     protected $fillable = [
         'user_id',
         'stall_id',
+        'rental_type',
+        'daily_price',
+        'monthly_price',
+        'entry_fee',
+        'security_deposit',
+        'total_amount',
         'booking_date',
         'start_date',
         'end_date',

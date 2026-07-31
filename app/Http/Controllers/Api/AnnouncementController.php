@@ -58,7 +58,8 @@ class AnnouncementController extends Controller
             $file->storeAs('', $filename, 'custom_images');
             $imagePath = $filename;
         } elseif ($request->filled('image')) {
-            $imagePath = $request->input('image');
+            $rawImg = $request->input('image');
+            $imagePath = basename($rawImg);
         }
 
         $createData = [
@@ -70,7 +71,7 @@ class AnnouncementController extends Controller
             'user_id' => $request->input('user_id', 1),
         ];
 
-        if ($imagePath !== null && \Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image')) {
+        if ($imagePath !== null) {
             $createData['image'] = $imagePath;
         }
 
@@ -115,7 +116,7 @@ class AnnouncementController extends Controller
 
         $imagePath = null;
         if ($request->hasFile('image')) {
-            if (\Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image') && $announcement->image && !str_starts_with($announcement->image, 'http')) {
+            if ($announcement->image && !str_starts_with($announcement->image, 'http')) {
                 \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($announcement->image);
             }
             $file = $request->file('image');
@@ -123,10 +124,11 @@ class AnnouncementController extends Controller
             $file->storeAs('', $filename, 'custom_images');
             $imagePath = $filename;
         } elseif ($request->filled('image')) {
-            $imagePath = $request->input('image');
+            $rawImg = $request->input('image');
+            $imagePath = basename($rawImg);
         }
 
-        if ($imagePath !== null && \Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image')) {
+        if ($imagePath !== null) {
             $announcement->image = $imagePath;
         }
 
@@ -184,14 +186,12 @@ class AnnouncementController extends Controller
 
     protected function formatAnnouncement(Announcement $announcement): array
     {
-        $imageVal = \Illuminate\Support\Facades\Schema::hasColumn('announcement', 'image') ? $announcement->image : null;
-
         return [
             'announcement_id' => $announcement->announcement_id,
             'title' => $announcement->title,
             'announcement_type' => $announcement->announcement_type,
             'description' => $announcement->description,
-            'image' => $imageVal,
+            'image' => $announcement->image,
             'publish_date' => $this->serializeDate($announcement->publish_date),
             'status' => $announcement->status,
             'user_id' => $announcement->user_id,

@@ -9,6 +9,31 @@ use Illuminate\Support\Facades\Validator;
 
 class ProblemReportController extends Controller
 {
+    private function normalizeReportType(?string $category): string
+    {
+        if (! $category) {
+            return 'other';
+        }
+        $cat = mb_strtolower(trim($category));
+        if (str_contains($cat, 'ไฟฟ้า') || $cat === 'electric') {
+            return 'electric';
+        }
+        if (str_contains($cat, 'ประปา') || $cat === 'water') {
+            return 'water';
+        }
+        if (str_contains($cat, 'โครงสร้าง') || $cat === 'structure') {
+            return 'structure';
+        }
+        if (str_contains($cat, 'ความสะอาด') || $cat === 'clean') {
+            return 'clean';
+        }
+        if (str_contains($cat, 'ความคิดเห็น') || $cat === 'feedback') {
+            return 'feedback';
+        }
+
+        return 'other';
+    }
+
     public function index(Request $request)
     {
         $query = ProblemReport::query()->with(['user', 'stall']);
@@ -26,12 +51,27 @@ class ProblemReportController extends Controller
             });
         }
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->input('user_id'));
+        if ($request->filled('type') || $request->filled('category')) {
+            $reqType = $request->input('type', $request->input('category'));
+            if ($reqType !== 'all') {
+                $normType = $this->normalizeReportType($reqType);
+                $thaiCategoryMap = [
+                    'electric' => 'ไฟฟ้า',
+                    'water' => 'ประปา',
+                    'structure' => 'โครงสร้าง',
+                    'clean' => 'ความสะอาด',
+                    'feedback' => 'ความคิดเห็น',
+                ];
+                $thaiKeyword = $thaiCategoryMap[$normType] ?? null;
+
+                if ($thaiKeyword) {
+                    $query->where('description', 'like', "%{$thaiKeyword}%");
+                }
+            }
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->input('user_id'));
         }
 
         if ($request->filled('start_date')) {
@@ -43,6 +83,8 @@ class ProblemReportController extends Controller
         }
 
         $reports = $query->orderByDesc('report_date')->get()->map(function (ProblemReport $report) {
+            $rawType = $this->normalizeReportType($report->description);
+
             return [
                 'id' => $report->problem_id,
                 'problem_id' => $report->problem_id,
@@ -50,7 +92,7 @@ class ProblemReportController extends Controller
                 'image' => $report->image,
                 'report_date' => $report->report_date,
                 'status' => $report->status,
-                'report_type' => $report->report_type ?? 'other',
+                'report_type' => $rawType,
                 'admin_note' => $report->admin_comment,
                 'admin_comment' => $report->admin_comment,
                 'user_id' => $report->user_id,
@@ -103,6 +145,8 @@ class ProblemReportController extends Controller
         $report->fill($payload);
         $report->save();
 
+        $rawType = $this->normalizeReportType($report->description);
+
         return response()->json([
             'status' => true,
             'message' => 'Problem report updated successfully',
@@ -113,7 +157,7 @@ class ProblemReportController extends Controller
                 'image' => $report->image,
                 'report_date' => $report->report_date,
                 'status' => $report->status,
-                'report_type' => $report->report_type ?? 'other',
+                'report_type' => $rawType,
                 'admin_note' => $report->admin_comment,
                 'admin_comment' => $report->admin_comment,
                 'user_name' => $report->user?->username,
@@ -156,11 +200,12 @@ class ProblemReportController extends Controller
             $file = $request->file('image');
             $imageName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             $file->storeAs('', $imageName, 'custom_images');
-        } else if ($request->filled('image')) {
+        } elseif ($request->filled('image')) {
             $imageName = $request->input('image');
         }
 
         $category = $request->input('category');
+        $reportType = $this->normalizeReportType($category);
         $fullDescription = "[หมวดหมู่: {$category}] " . $request->input('description');
 
         $report = ProblemReport::create([
@@ -182,9 +227,10 @@ class ProblemReportController extends Controller
                 'image' => $report->image,
                 'report_date' => $report->report_date,
                 'status' => $report->status,
+                'report_type' => $reportType,
                 'stall_id' => $report->stall_id,
                 'user_id' => $report->user_id,
-            ]
+            ],
         ], 201);
     }
 }

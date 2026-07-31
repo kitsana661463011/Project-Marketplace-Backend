@@ -11,12 +11,13 @@ class ItemController extends Controller
 {
     private function uploadImage($file, $oldImage = null)
     {
-        if ($oldImage) {
-            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($oldImage);
+        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
+            @unlink(storage_path('images/' . $oldImage));
         }
 
-        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-        $file->storeAs('', $filename, 'custom_images');
+        $ext = $file->getClientOriginalExtension() ?: 'png';
+        $filename = time() . '_item_' . uniqid() . '.' . $ext;
+        $file->move(storage_path('images'), $filename);
 
         return $filename;
     }
@@ -40,19 +41,22 @@ class ItemController extends Controller
             'price' => ['required', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'item_image' => ['nullable'],
-            'category_id' => ['required', 'integer', 'exists:item_category,category_id'],
+            'item_image_file' => ['nullable'],
+            'category_id' => ['sometimes', 'nullable', 'integer'],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation failed',
+                'message' => 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'data' => $validator->errors(),
             ], 422);
         }
 
         $imagePath = null;
-        if ($request->hasFile('item_image')) {
+        if ($request->hasFile('item_image_file')) {
+            $imagePath = $this->uploadImage($request->file('item_image_file'));
+        } else if ($request->hasFile('item_image')) {
             $imagePath = $this->uploadImage($request->file('item_image'));
         } else if ($request->filled('item_image')) {
             $imagePath = $request->input('item_image');
@@ -134,20 +138,23 @@ class ItemController extends Controller
             'price' => ['sometimes', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'item_image' => ['nullable'],
+            'item_image_file' => ['nullable'],
             'images' => ['nullable'],
-            'category_id' => ['sometimes', 'integer', 'exists:item_category,category_id'],
+            'category_id' => ['sometimes', 'nullable', 'integer'],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation failed',
+                'message' => 'Validation failed: ' . implode(', ', $validator->errors()->all()),
                 'data' => $validator->errors(),
             ], 422);
         }
 
         $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
-        if ($request->hasFile('item_image')) {
+        if ($request->hasFile('item_image_file')) {
+            $data['item_image'] = $this->uploadImage($request->file('item_image_file'), $item->item_image);
+        } else if ($request->hasFile('item_image')) {
             $data['item_image'] = $this->uploadImage($request->file('item_image'), $item->item_image);
         } else if ($request->filled('item_image')) {
             $data['item_image'] = $request->input('item_image');

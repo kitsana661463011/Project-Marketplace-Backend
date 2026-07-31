@@ -26,6 +26,12 @@ class StallController extends Controller
         $validator = Validator::make($request->all(), [
             'stall_number' => ['required', 'string', 'max:20'],
             'size' => ['nullable', 'string', 'max:50'],
+            'price' => ['nullable', 'numeric'],
+            'rental_type' => ['nullable', Rule::in(['daily', 'monthly'])],
+            'daily_price' => ['nullable', 'numeric'],
+            'monthly_price' => ['nullable', 'numeric'],
+            'entry_fee' => ['nullable', 'numeric'],
+            'security_deposit' => ['nullable', 'numeric'],
             'status' => ['required', Rule::in(['available', 'occupied', 'maintenance'])],
             'zone_id' => ['required', 'integer', 'exists:market_zone,zone_id'],
             'start_date' => ['nullable', 'date'],
@@ -40,7 +46,17 @@ class StallController extends Controller
             ], 422);
         }
 
-        $stall = Stall::create($request->only(['stall_number', 'size', 'status', 'zone_id', 'start_date', 'end_date']));
+        $data = $request->only([
+            'stall_number', 'size', 'price', 'rental_type', 'daily_price',
+            'monthly_price', 'entry_fee', 'security_deposit', 'status',
+            'zone_id', 'start_date', 'end_date'
+        ]);
+
+        if (isset($data['daily_price']) && !isset($data['price'])) {
+            $data['price'] = $data['daily_price'];
+        }
+
+        $stall = Stall::create($data);
 
         return response()->json([
             'status' => true,
@@ -83,6 +99,12 @@ class StallController extends Controller
         $validator = Validator::make($request->all(), [
             'stall_number' => ['sometimes', 'string', 'max:20'],
             'size' => ['nullable', 'string', 'max:50'],
+            'price' => ['nullable', 'numeric'],
+            'rental_type' => ['nullable', Rule::in(['daily', 'monthly'])],
+            'daily_price' => ['nullable', 'numeric'],
+            'monthly_price' => ['nullable', 'numeric'],
+            'entry_fee' => ['nullable', 'numeric'],
+            'security_deposit' => ['nullable', 'numeric'],
             'status' => ['sometimes', Rule::in(['available', 'occupied', 'maintenance'])],
             'zone_id' => ['sometimes', 'integer', 'exists:market_zone,zone_id'],
             'start_date' => ['nullable', 'date'],
@@ -97,7 +119,17 @@ class StallController extends Controller
             ], 422);
         }
 
-        $stall->update($request->only(['stall_number', 'size', 'status', 'zone_id', 'start_date', 'end_date']));
+        $data = $request->only([
+            'stall_number', 'size', 'price', 'rental_type', 'daily_price',
+            'monthly_price', 'entry_fee', 'security_deposit', 'status',
+            'zone_id', 'start_date', 'end_date'
+        ]);
+
+        if (isset($data['daily_price']) && !isset($data['price'])) {
+            $data['price'] = $data['daily_price'];
+        }
+
+        $stall->update($data);
 
         return response()->json([
             'status' => true,
