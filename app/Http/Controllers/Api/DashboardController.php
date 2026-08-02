@@ -133,8 +133,10 @@ class DashboardController extends Controller
 
                 arsort($interestCounts);
                 $totalSelections = array_sum($interestCounts);
+                $interestNameToId = array_flip($allInterestsOptions);
                 foreach ($interestCounts as $name => $count) {
                     $userInterestsFormatted[] = [
+                        'id' => $interestNameToId[$name] ?? null,
                         'name' => $name,
                         'count' => $count,
                         'percentage' => $totalSelections > 0 ? round(($count / $totalSelections) * 100, 1) : 0,
@@ -238,7 +240,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'status' => true,
-            'data' => $options->pluck('interest_name'),
+            'data' => $options,
         ], 200);
     }
 
@@ -261,6 +263,54 @@ class DashboardController extends Controller
             'status' => true,
             'message' => 'User interest option added successfully',
         ], 201);
+    }
+
+    public function destroyCategory($id)
+    {
+        $category = DB::table('shop_category')->where('category_id', $id)->first();
+        if (! $category) {
+            return response()->json([
+                'status' => false,
+                'message' => 'ไม่พบหมวดหมู่สินค้านี้',
+            ], 404);
+        }
+
+        $shopUsedCount = DB::table('shop')->where('category_id', $id)->count();
+        if ($shopUsedCount > 0) {
+            return response()->json([
+                'status' => false,
+                'message' => 'ไม่สามารถลบหมวดหมู่นี้ได้ เนื่องจากมีร้านค้าใช้งานอยู่',
+            ], 400);
+        }
+
+        DB::table('shop_category')->where('category_id', $id)->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'ลบหมวดหมู่สินค้าสำเร็จแล้ว',
+        ], 200);
+    }
+
+    public function destroyUserInterest($id)
+    {
+        $option = DB::table('user_interest_option')->where('interest_id', $id)->first();
+        if (! $option) {
+            return response()->json([
+                'status' => false,
+                'message' => 'ไม่พบทตัวเลือกความสนใจนี้',
+            ], 404);
+        }
+
+        if (Schema::hasTable('user_has_interest')) {
+            DB::table('user_has_interest')->where('interest_id', $id)->delete();
+        }
+
+        DB::table('user_interest_option')->where('interest_id', $id)->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'ลบตัวเลือกความสนใจสำเร็จแล้ว',
+        ], 200);
     }
 
     public function badgeCounts()

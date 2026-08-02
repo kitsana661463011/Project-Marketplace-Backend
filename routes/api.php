@@ -59,8 +59,10 @@ Route::prefix('v1')->group(function () {
     Route::get('dashboard/badge-counts', [DashboardController::class, 'badgeCounts']);
     Route::get('categories', [DashboardController::class, 'getCategories']);
     Route::post('categories', [DashboardController::class, 'storeCategory']);
+    Route::delete('categories/{id}', [DashboardController::class, 'destroyCategory']);
     Route::get('user-interests', [DashboardController::class, 'getUserInterests']);
     Route::post('user-interests', [DashboardController::class, 'storeUserInterest']);
+    Route::delete('user-interests/{id}', [DashboardController::class, 'destroyUserInterest']);
     Route::get('maps/{id}', [MarketMapController::class, 'show']);
     Route::put('maps/{id}/items', [MarketMapController::class, 'saveItems']);
     Route::apiResource('users', UserController::class);
