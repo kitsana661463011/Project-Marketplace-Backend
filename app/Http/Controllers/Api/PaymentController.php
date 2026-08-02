@@ -24,13 +24,27 @@ class PaymentController extends Controller
         ], 200);
     }
 
+    private function uploadImage($file, $oldImage = null)
+    {
+        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
+            @unlink(storage_path('images/' . $oldImage));
+        }
+
+        $ext = $file->getClientOriginalExtension() ?: 'png';
+        $filename = time() . '_slip_' . uniqid() . '.' . $ext;
+        $file->move(storage_path('images'), $filename);
+
+        return $filename;
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'booking_id' => ['required', 'integer', 'exists:stall_booking,booking_id'],
             'amount' => ['required', 'numeric', 'min:0'],
             'payment_date' => ['nullable', 'date'],
-            'payment_slip' => ['nullable', 'string', 'max:255'],
+            'payment_slip' => ['nullable'],
+            'payment_slip_file' => ['nullable'],
             'status' => ['required', Rule::in(['pending', 'verified', 'rejected', 'refund_requested', 'refunded'])],
             'refund_reason' => ['nullable', 'string'],
             'refund_bank_name' => ['nullable', 'string', 'max:100'],
@@ -48,10 +62,18 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        $payment = Payment::create($request->only([
+        $data = $request->only([
             'booking_id', 'amount', 'payment_date', 'payment_slip', 'status',
             'refund_reason', 'refund_bank_name', 'refund_account_number', 'refund_account_name', 'refund_slip', 'refunded_at'
-        ]));
+        ]);
+
+        if ($request->hasFile('payment_slip_file')) {
+            $data['payment_slip'] = $this->uploadImage($request->file('payment_slip_file'));
+        } elseif ($request->hasFile('payment_slip')) {
+            $data['payment_slip'] = $this->uploadImage($request->file('payment_slip'));
+        }
+
+        $payment = Payment::create($data);
 
         return response()->json([
             'status' => true,

@@ -73,6 +73,8 @@ class MarketMapController extends Controller
                         $mapStatus = 'approved';
                     } elseif ($activeBooking->status === 'pending') {
                         $mapStatus = 'occupied'; // show as occupied while pending
+                    } elseif (in_array($activeBooking->status, ['refund_requested', 'refunded'], true)) {
+                        $mapStatus = $activeBooking->status;
                     }
                     // If booking is rejected/cancelled, keep the stall's own status
                 }
@@ -234,7 +236,7 @@ class MarketMapController extends Controller
                                 $zoneId = \App\Models\MarketZone::first()?->zone_id ?? 1;
                             }
                             $stallPayload['zone_id'] = $zoneId;
-                            
+
                             // Check if a stall with the same number already exists to prevent duplicates
                             $existingStall = \App\Models\Stall::where('stall_number', $item['label'])->first();
                             if ($existingStall) {

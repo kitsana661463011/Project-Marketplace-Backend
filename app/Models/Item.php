@@ -20,6 +20,7 @@ class Item extends Model
         'item_image',
         'images',
         'category_id',
+        'status',
     ];
 
     protected $casts = [

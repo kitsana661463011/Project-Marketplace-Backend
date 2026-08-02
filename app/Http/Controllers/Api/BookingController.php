@@ -134,6 +134,12 @@ class BookingController extends Controller
             'start_date' => ['required', 'date'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
             'status' => ['required', Rule::in($this->getAllowedStatuses())],
+            'rental_type' => ['nullable', 'string', Rule::in(['daily', 'monthly'])],
+            'daily_price' => ['nullable', 'numeric', 'min:0'],
+            'monthly_price' => ['nullable', 'numeric', 'min:0'],
+            'entry_fee' => ['nullable', 'numeric', 'min:0'],
+            'security_deposit' => ['nullable', 'numeric', 'min:0'],
+            'total_amount' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         if ($validator->fails()) {
@@ -144,7 +150,10 @@ class BookingController extends Controller
             ], 422);
         }
 
-        $booking = StallBooking::create($request->only(['user_id', 'stall_id', 'booking_date', 'start_date', 'end_date', 'status']));
+        $booking = StallBooking::create($request->only([
+            'user_id', 'stall_id', 'booking_date', 'start_date', 'end_date', 'status',
+            'rental_type', 'daily_price', 'monthly_price', 'entry_fee', 'security_deposit', 'total_amount',
+        ]));
 
         return response()->json([
             'status' => true,

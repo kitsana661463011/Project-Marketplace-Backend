@@ -50,6 +50,8 @@ Route::prefix('admin')->group(function () {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::get('admin/market-payment-settings', [MarketPaymentSettingController::class, 'index']);
+    Route::post('admin/market-payment-settings', [MarketPaymentSettingController::class, 'update']);
     Route::get('followed-shops', [FollowShopController::class, 'index']);
     Route::post('followed-shops/toggle', [FollowShopController::class, 'toggle']);
     Route::get('followed-shops/check', [FollowShopController::class, 'check']);

@@ -83,7 +83,7 @@ class ShopController extends Controller
 
     public function show($id)
     {
-        $shop = Shop::with(['category', 'owner'])->find($id);
+        $shop = Shop::with(['category', 'owner'])->withCount('follows')->find($id);
 
         if (! $shop) {
             return response()->json([

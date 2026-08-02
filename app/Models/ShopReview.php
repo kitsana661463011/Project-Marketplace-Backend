@@ -19,6 +19,11 @@ class ShopReview extends Model
         'comment',
         'review_date',
         'status',
+        'review_images',
+    ];
+
+    protected $casts = [
+        'review_images' => 'array',
     ];
 
     public function user()

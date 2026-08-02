@@ -15,7 +15,8 @@ return new class extends Migration
             $table->decimal('price', 10, 2);
             $table->text('description')->nullable();
             $table->string('item_image')->nullable();
-            $table->integer('category_id');
+            $table->text('images')->nullable();
+            $table->integer('category_id')->nullable();
             $table->primary('item_id');
             $table->foreign('shop_id')->references('shop_id')->on('shop')->onDelete('cascade')->onUpdate('cascade');
             $table->foreign('category_id')->references('category_id')->on('item_category')->onUpdate('cascade');

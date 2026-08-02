@@ -22,9 +22,15 @@ class ItemController extends Controller
         return $filename;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $items = Item::with(['shop', 'category'])->get();
+        $query = Item::with(['shop', 'category']);
+
+        if ($request->filled('shop_id')) {
+            $query->where('shop_id', $request->input('shop_id'));
+        }
+
+        $items = $query->get();
 
         return response()->json([
             'status' => true,
@@ -42,7 +48,9 @@ class ItemController extends Controller
             'description' => ['nullable', 'string'],
             'item_image' => ['nullable'],
             'item_image_file' => ['nullable'],
+            'images' => ['nullable'],
             'category_id' => ['sometimes', 'nullable', 'integer'],
+            'status' => ['nullable', 'in:เปิดขาย,ปิดขาย'],
         ]);
 
         if ($validator->fails()) {
@@ -63,8 +71,12 @@ class ItemController extends Controller
         }
 
         $imagesList = [];
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $file) {
+        $imageFiles = $request->hasFile('images')
+            ? $request->file('images')
+            : ($request->hasFile('images[]') ? $request->file('images[]') : null);
+
+        if ($imageFiles) {
+            foreach ((array) $imageFiles as $file) {
                 $imagesList[] = $this->uploadImage($file);
             }
         } else if ($request->filled('images')) {
@@ -81,7 +93,13 @@ class ItemController extends Controller
             $imagesList = [$imagePath];
         }
 
-        $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
+        $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id', 'status']);
+        if (!isset($data['category_id']) || $data['category_id'] === null || $data['category_id'] === '') {
+            $data['category_id'] = 1;
+        }
+        if (empty($data['status'])) {
+            $data['status'] = 'เปิดขาย';
+        }
         if ($imagePath) {
             $data['item_image'] = $imagePath;
         }
@@ -141,6 +159,7 @@ class ItemController extends Controller
             'item_image_file' => ['nullable'],
             'images' => ['nullable'],
             'category_id' => ['sometimes', 'nullable', 'integer'],
+            'status' => ['nullable', 'in:เปิดขาย,ปิดขาย'],
         ]);
 
         if ($validator->fails()) {
@@ -151,7 +170,7 @@ class ItemController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id']);
+        $data = $request->only(['shop_id', 'item_name', 'price', 'description', 'category_id', 'status']);
         if ($request->hasFile('item_image_file')) {
             $data['item_image'] = $this->uploadImage($request->file('item_image_file'), $item->item_image);
         } else if ($request->hasFile('item_image')) {
@@ -160,9 +179,13 @@ class ItemController extends Controller
             $data['item_image'] = $request->input('item_image');
         }
 
-        if ($request->hasFile('images')) {
+        $imageFiles = $request->hasFile('images')
+            ? $request->file('images')
+            : ($request->hasFile('images[]') ? $request->file('images[]') : null);
+
+        if ($imageFiles) {
             $imagesList = [];
-            foreach ($request->file('images') as $file) {
+            foreach ((array) $imageFiles as $file) {
                 $imagesList[] = $this->uploadImage($file);
             }
             $data['images'] = $imagesList;
