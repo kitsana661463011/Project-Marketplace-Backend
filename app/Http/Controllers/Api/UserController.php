@@ -122,6 +122,19 @@ class UserController extends Controller
         ], 200);
     }
 
+    private function uploadProfileImage($file, $oldImage = null)
+    {
+        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
+            @unlink(storage_path('images/' . $oldImage));
+        }
+
+        $ext = $file->getClientOriginalExtension() ?: 'png';
+        $filename = time() . '_profile_' . uniqid() . '.' . $ext;
+        $file->move(storage_path('images'), $filename);
+
+        return $filename;
+    }
+
     public function update(Request $request, $id)
     {
         $user = User::find($id);
@@ -188,15 +201,9 @@ class UserController extends Controller
         }
 
         if ($request->hasFile('profile_image_file')) {
-            $file = $request->file('profile_image_file');
-            $filename = time() . '_profile_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $file->move(storage_path('images'), $filename);
-            $data['profile_image'] = $filename;
+            $data['profile_image'] = $this->uploadProfileImage($request->file('profile_image_file'), $user->profile_image);
         } elseif ($request->hasFile('profile_image')) {
-            $file = $request->file('profile_image');
-            $filename = time() . '_profile_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $file->move(storage_path('images'), $filename);
-            $data['profile_image'] = $filename;
+            $data['profile_image'] = $this->uploadProfileImage($request->file('profile_image'), $user->profile_image);
         }
 
         if ($request->filled('password')) {
@@ -233,6 +240,10 @@ class UserController extends Controller
                 'message' => 'User not found',
                 'data' => null,
             ], 404);
+        }
+
+        if ($user->profile_image && file_exists(storage_path('images/' . $user->profile_image))) {
+            @unlink(storage_path('images/' . $user->profile_image));
         }
 
         $user->delete();

@@ -153,6 +153,13 @@ class AnnouncementController extends Controller
             ], 404);
         }
 
+        if ($announcement->image && !str_starts_with($announcement->image, 'http')) {
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($announcement->image);
+            if (file_exists(storage_path('images/' . $announcement->image))) {
+                @unlink(storage_path('images/' . $announcement->image));
+            }
+        }
+
         $announcement->delete();
 
         return response()->json([

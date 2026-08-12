@@ -20,6 +20,7 @@ class Shop extends Model
         'social_links',
         'shop_image',
         'user_id',
+        'status',
     ];
 
     public function category()

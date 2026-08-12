@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\FollowShopController;
 use App\Http\Controllers\Api\ShopReviewController;
 use App\Http\Controllers\Api\ReviewReportController;
+use App\Http\Controllers\Api\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('images/{filename}', function ($filename) {
@@ -50,6 +51,9 @@ Route::prefix('admin')->group(function () {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::post('forgot-password', [PasswordResetController::class, 'sendResetCode']);
+    Route::post('verify-reset-code', [PasswordResetController::class, 'verifyResetCode']);
+    Route::post('reset-password', [PasswordResetController::class, 'resetPassword']);
     Route::get('admin/market-payment-settings', [MarketPaymentSettingController::class, 'index']);
     Route::post('admin/market-payment-settings', [MarketPaymentSettingController::class, 'update']);
     Route::get('followed-shops', [FollowShopController::class, 'index']);

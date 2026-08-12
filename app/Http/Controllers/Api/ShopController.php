@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Shop;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -31,7 +32,27 @@ class ShopController extends Controller
             $query->where('user_id', $request->input('user_id'));
         }
 
-        $shops = $query->get();
+        $shops = $query->get()->map(function ($shop) {
+            $avgRating = $shop->reviews()->where('status', 'show')->avg('rating');
+            $reviewCount = $shop->reviews()->where('status', 'show')->count();
+            $followsCount = $shop->follows()->count();
+
+            $activeBooking = DB::table('stall_booking as sb')
+                ->join('stall as s', 's.stall_id', '=', 'sb.stall_id')
+                ->leftJoin('market_zone as mz', 'mz.zone_id', '=', 's.zone_id')
+                ->where('sb.user_id', $shop->user_id)
+                ->where('sb.status', 'approved')
+                ->select('s.stall_number', 'mz.zone_name')
+                ->first();
+
+            $shopArray = $shop->toArray();
+            $shopArray['avg_rating'] = $avgRating ? round((float)$avgRating, 1) : null;
+            $shopArray['review_count'] = $reviewCount;
+            $shopArray['follows_count'] = $followsCount;
+            $shopArray['stall_number'] = $activeBooking ? $activeBooking->stall_number : null;
+            $shopArray['zone_name'] = $activeBooking ? $activeBooking->zone_name : null;
+            return $shopArray;
+        });
 
         return response()->json([
             'status' => true,
@@ -49,6 +70,7 @@ class ShopController extends Controller
             'shop_phone' => ['nullable', 'string', 'max:15'],
             'social_links' => ['nullable', 'json'],
             'shop_image' => ['nullable'],
+            'status' => ['nullable', 'string', 'max:50'],
             'user_id' => ['required', 'integer', 'exists:user,user_id'],
         ]);
 
@@ -67,7 +89,7 @@ class ShopController extends Controller
             $imagePath = $request->input('shop_image');
         }
 
-        $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
+        $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id', 'status']);
         if ($imagePath) {
             $data['shop_image'] = $imagePath;
         }
@@ -119,6 +141,7 @@ class ShopController extends Controller
             'shop_phone' => ['nullable', 'string', 'max:15'],
             'social_links' => ['nullable', 'json'],
             'shop_image' => ['nullable'],
+            'status' => ['nullable', 'string', 'max:50'],
             'user_id' => ['sometimes', 'integer', 'exists:user,user_id'],
         ]);
 
@@ -130,7 +153,7 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id']);
+        $data = $request->only(['shop_name', 'category_id', 'description', 'shop_phone', 'social_links', 'user_id', 'status']);
         if ($request->hasFile('shop_image_file')) {
             $data['shop_image'] = $this->uploadImage($request->file('shop_image_file'), $shop->shop_image);
         } else if ($request->hasFile('shop_image')) {
