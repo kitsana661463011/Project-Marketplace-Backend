@@ -24,6 +24,30 @@ class ShopController extends Controller
         return $filename;
     }
 
+    private function syncShopTags($shopId, $tagsRaw)
+    {
+        if ($tagsRaw === null) return;
+        DB::table('shop_has_tag')->where('shop_id', $shopId)->delete();
+
+        $tagNames = is_array($tagsRaw)
+            ? $tagsRaw
+            : array_map('trim', explode(',', (string)$tagsRaw));
+
+        foreach ($tagNames as $name) {
+            if (empty($name)) continue;
+            $opt = DB::table('user_interest_option')
+                ->where('interest_name', $name)
+                ->orWhere('interest_id', $name)
+                ->first();
+            if ($opt) {
+                DB::table('shop_has_tag')->insertOrIgnore([
+                    'shop_id' => $shopId,
+                    'interest_id' => $opt->interest_id,
+                ]);
+            }
+        }
+    }
+
     public function index(Request $request)
     {
         $query = Shop::with(['category', 'owner']);
@@ -51,6 +75,7 @@ class ShopController extends Controller
             $shopArray['follows_count'] = $followsCount;
             $shopArray['stall_number'] = $activeBooking ? $activeBooking->stall_number : null;
             $shopArray['zone_name'] = $activeBooking ? $activeBooking->zone_name : null;
+            $shopArray['tags'] = $shop->tags;
             return $shopArray;
         });
 
@@ -72,6 +97,7 @@ class ShopController extends Controller
             'shop_image' => ['nullable'],
             'status' => ['nullable', 'string', 'max:50'],
             'user_id' => ['required', 'integer', 'exists:user,user_id'],
+            'tags' => ['nullable'],
         ]);
 
         if ($validator->fails()) {
@@ -96,10 +122,17 @@ class ShopController extends Controller
 
         $shop = Shop::create($data);
 
+        if ($request->has('tags')) {
+            $this->syncShopTags($shop->shop_id, $request->input('tags'));
+        }
+
+        $shopArray = $shop->fresh()->toArray();
+        $shopArray['tags'] = $shop->tags;
+
         return response()->json([
             'status' => true,
             'message' => 'Shop created successfully',
-            'data' => $shop,
+            'data' => $shopArray,
         ], 201);
     }
 
@@ -115,10 +148,13 @@ class ShopController extends Controller
             ], 404);
         }
 
+        $shopArray = $shop->toArray();
+        $shopArray['tags'] = $shop->tags;
+
         return response()->json([
             'status' => true,
             'message' => 'Shop retrieved successfully',
-            'data' => $shop,
+            'data' => $shopArray,
         ], 200);
     }
 
@@ -143,6 +179,7 @@ class ShopController extends Controller
             'shop_image' => ['nullable'],
             'status' => ['nullable', 'string', 'max:50'],
             'user_id' => ['sometimes', 'integer', 'exists:user,user_id'],
+            'tags' => ['nullable'],
         ]);
 
         if ($validator->fails()) {
@@ -164,10 +201,17 @@ class ShopController extends Controller
 
         $shop->update($data);
 
+        if ($request->has('tags')) {
+            $this->syncShopTags($shop->shop_id, $request->input('tags'));
+        }
+
+        $shopArray = $shop->fresh()->toArray();
+        $shopArray['tags'] = $shop->tags;
+
         return response()->json([
             'status' => true,
             'message' => 'Shop updated successfully',
-            'data' => $shop->fresh(),
+            'data' => $shopArray,
         ], 200);
     }
 

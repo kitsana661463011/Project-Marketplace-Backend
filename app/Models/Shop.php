@@ -47,4 +47,13 @@ class Shop extends Model
     {
         return $this->hasMany(FollowShop::class, 'shop_id', 'shop_id');
     }
+
+    public function getTagsAttribute()
+    {
+        return \Illuminate\Support\Facades\DB::table('shop_has_tag as sht')
+            ->join('user_interest_option as uio', 'sht.interest_id', '=', 'uio.interest_id')
+            ->where('sht.shop_id', $this->shop_id)
+            ->pluck('uio.interest_name')
+            ->toArray();
+    }
 }

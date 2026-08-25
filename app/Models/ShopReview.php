@@ -24,6 +24,7 @@ class ShopReview extends Model
 
     protected $casts = [
         'review_images' => 'array',
+        'rating' => 'float',
     ];
 
     public function user()
@@ -39,5 +40,10 @@ class ShopReview extends Model
     public function reports()
     {
         return $this->hasMany(ReviewReport::class, 'review_id', 'review_id');
+    }
+
+    public function reactions()
+    {
+        return $this->hasMany(ReviewReaction::class, 'review_id', 'review_id');
     }
 }

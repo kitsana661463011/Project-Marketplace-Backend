@@ -77,6 +77,7 @@ Route::prefix('v1')->group(function () {
     Route::apiResource('payments', PaymentController::class);
     Route::get('shop-reviews', [ShopReviewController::class, 'index']);
     Route::post('shop-reviews', [ShopReviewController::class, 'store']);
+    Route::post('shop-reviews/reaction', [ShopReviewController::class, 'react']);
     Route::post('review-reports', [ReviewReportController::class, 'store']);
     Route::post('problem-reports', [ProblemReportController::class, 'store']);
     Route::get('problem-reports', [ProblemReportController::class, 'index']);

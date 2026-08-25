@@ -16,7 +16,7 @@ class MarketMapController extends Controller
      */
     public function show($id)
     {
-        $map = MarketMap::with(['items.stall.bookings.user.shop.category'])->find($id);
+        $map = MarketMap::with(['items.stall.bookings.user'])->find($id);
 
         if (!$map) {
             return response()->json([
@@ -25,7 +25,16 @@ class MarketMapController extends Controller
             ], 404);
         }
 
-        $items = $map->items->map(function ($item) {
+        // Preload all shops with category and group by user_id
+        $allShops = \App\Models\Shop::with('category')->orderBy('shop_id', 'asc')->get()->groupBy('user_id');
+
+        // Preload all approved/occupied bookings grouped by user_id (sorted latest first, matching Flutter client order)
+        $allApprovedBookings = \App\Models\StallBooking::whereIn('status', ['approved', 'occupied'])
+            ->orderBy('booking_id', 'desc')
+            ->get()
+            ->groupBy('user_id');
+
+        $items = $map->items->map(function ($item) use ($allShops, $allApprovedBookings) {
             $seller = null;
             $mapStatus = 'available'; // default
 
@@ -47,16 +56,28 @@ class MarketMapController extends Controller
                     ?? $bookings->first();
 
                 if ($activeBooking && $activeBooking->user) {
-                    $shop = $activeBooking->user->shop;
+                    $userId = $activeBooking->user->user_id;
+                    $userShops = $allShops->get($userId, collect());
+                    $userBookings = $allApprovedBookings->get($userId, collect())->values();
+
+                    $shop = null;
+                    if (in_array($activeBooking->status, ['approved', 'occupied'])) {
+                        // Match booking with shop by sequential index (1 shop per 1 booking)
+                        $bookingIndex = $userBookings->search(fn($b) => $b->booking_id === $activeBooking->booking_id);
+                        if ($bookingIndex !== false && isset($userShops[$bookingIndex])) {
+                            $shop = $userShops[$bookingIndex];
+                        }
+                    }
+
                     $shopName = $shop ? $shop->shop_name : null;
-                    $displayName = $shopName ?: 'ร้านค้าจองแล้ว';
+                    $displayName = $shopName ?: ($activeBooking->user->username ?: 'ร้านค้าจองแล้ว');
 
                     $seller = [
                         'id'             => (string)$activeBooking->user->user_id,
                         'name'           => $displayName,
                         'shop_id'        => $shop ? $shop->shop_id : null,
                         'shop_name'      => $shopName,
-                        'category_name'  => ($shop && $shop->category) ? $shop->category->category_name : 'อาหารและเครื่องดื่ม',
+                        'category_name'  => ($shop && $shop->category) ? $shop->category->category_name : null,
                         'description'    => $shop ? $shop->description : '',
                         'shop_phone'     => ($shop && $shop->shop_phone) ? $shop->shop_phone : ($activeBooking->user->phone ?: ''),
                         'shop_image'     => $shop ? $shop->shop_image : null,

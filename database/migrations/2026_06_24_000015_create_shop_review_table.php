@@ -12,7 +12,7 @@ return new class extends Migration
             $table->integer('review_id')->autoIncrement();
             $table->integer('user_id');
             $table->integer('shop_id');
-            $table->integer('rating');
+            $table->decimal('rating', 3, 1);
             $table->text('comment')->nullable();
             $table->dateTime('review_date')->useCurrent();
             $table->enum('status', ['show', 'hidden'])->default('show');
