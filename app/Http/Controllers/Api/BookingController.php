@@ -51,6 +51,8 @@ class BookingController extends Controller
                 's.monthly_price as stall_monthly_price',
                 's.entry_fee as stall_entry_fee',
                 's.security_deposit as stall_security_deposit',
+                's.has_electricity as stall_has_electricity',
+                's.has_water as stall_has_water',
                 'mz.zone_name',
                 'p.payment_id',
                 'p.amount',

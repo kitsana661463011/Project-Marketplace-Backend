@@ -14,6 +14,7 @@ class ItemCategory extends Model
 
     protected $fillable = [
         'category_name',
+        'shop_id',
     ];
 
     public function items()
@@ -21,8 +22,8 @@ class ItemCategory extends Model
         return $this->hasMany(Item::class, 'category_id', 'category_id');
     }
 
-    public function shops()
+    public function shop()
     {
-        return $this->hasMany(Shop::class, 'category_id', 'category_id');
+        return $this->belongsTo(Shop::class, 'shop_id', 'shop_id');
     }
 }

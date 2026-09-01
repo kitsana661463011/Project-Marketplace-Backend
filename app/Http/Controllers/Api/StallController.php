@@ -32,6 +32,8 @@ class StallController extends Controller
             'monthly_price' => ['nullable', 'numeric'],
             'entry_fee' => ['nullable', 'numeric'],
             'security_deposit' => ['nullable', 'numeric'],
+            'has_electricity' => ['nullable', 'boolean'],
+            'has_water' => ['nullable', 'boolean'],
             'status' => ['required', Rule::in(['available', 'occupied', 'maintenance'])],
             'zone_id' => ['required', 'integer', 'exists:market_zone,zone_id'],
             'start_date' => ['nullable', 'date'],
@@ -48,9 +50,16 @@ class StallController extends Controller
 
         $data = $request->only([
             'stall_number', 'size', 'price', 'rental_type', 'daily_price',
-            'monthly_price', 'entry_fee', 'security_deposit', 'status',
-            'zone_id', 'start_date', 'end_date'
+            'monthly_price', 'entry_fee', 'security_deposit', 'has_electricity',
+            'has_water', 'status', 'zone_id', 'start_date', 'end_date'
         ]);
+
+        if (!isset($data['has_electricity'])) {
+            $data['has_electricity'] = true;
+        }
+        if (!isset($data['has_water'])) {
+            $data['has_water'] = true;
+        }
 
         if (isset($data['daily_price']) && !isset($data['price'])) {
             $data['price'] = $data['daily_price'];
@@ -105,6 +114,8 @@ class StallController extends Controller
             'monthly_price' => ['nullable', 'numeric'],
             'entry_fee' => ['nullable', 'numeric'],
             'security_deposit' => ['nullable', 'numeric'],
+            'has_electricity' => ['nullable', 'boolean'],
+            'has_water' => ['nullable', 'boolean'],
             'status' => ['sometimes', Rule::in(['available', 'occupied', 'maintenance'])],
             'zone_id' => ['sometimes', 'integer', 'exists:market_zone,zone_id'],
             'start_date' => ['nullable', 'date'],
@@ -121,8 +132,8 @@ class StallController extends Controller
 
         $data = $request->only([
             'stall_number', 'size', 'price', 'rental_type', 'daily_price',
-            'monthly_price', 'entry_fee', 'security_deposit', 'status',
-            'zone_id', 'start_date', 'end_date'
+            'monthly_price', 'entry_fee', 'security_deposit', 'has_electricity',
+            'has_water', 'status', 'zone_id', 'start_date', 'end_date'
         ]);
 
         if (isset($data['daily_price']) && !isset($data['price'])) {

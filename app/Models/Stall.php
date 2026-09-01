@@ -21,8 +21,20 @@ class Stall extends Model
         'monthly_price',
         'entry_fee',
         'security_deposit',
+        'has_electricity',
+        'has_water',
         'status',
         'zone_id',
+    ];
+
+    protected $casts = [
+        'has_electricity' => 'boolean',
+        'has_water' => 'boolean',
+        'daily_price' => 'float',
+        'monthly_price' => 'float',
+        'entry_fee' => 'float',
+        'security_deposit' => 'float',
+        'price' => 'float',
     ];
 
     public function zone()

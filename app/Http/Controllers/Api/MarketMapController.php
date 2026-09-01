@@ -49,11 +49,11 @@ class MarketMapController extends Controller
                     $mapStatus = $stalledStatus ?: 'available';
                 }
 
-                // Find active booking: prefer approved, then pending, then latest
+                // Find active booking: prefer approved/occupied, then renewal_pending, then pending, then refund_requested
                 $bookings = $item->stall->bookings->sortByDesc('booking_id');
-                $activeBooking = $bookings->first(fn($b) => in_array($b->status, ['approved', 'occupied']))
+                $activeBooking = $bookings->first(fn($b) => in_array($b->status, ['approved', 'occupied', 'renewal_pending']))
                     ?? $bookings->first(fn($b) => $b->status === 'pending')
-                    ?? $bookings->first();
+                    ?? $bookings->first(fn($b) => $b->status === 'refund_requested');
 
                 if ($activeBooking && $activeBooking->user) {
                     $userId = $activeBooking->user->user_id;
@@ -92,12 +92,11 @@ class MarketMapController extends Controller
                     // Override map status based on actual booking status
                     if (in_array($activeBooking->status, ['approved', 'occupied'])) {
                         $mapStatus = 'approved';
-                    } elseif ($activeBooking->status === 'pending') {
+                    } elseif (in_array($activeBooking->status, ['pending', 'renewal_pending'])) {
                         $mapStatus = 'occupied'; // show as occupied while pending
-                    } elseif (in_array($activeBooking->status, ['refund_requested', 'refunded'], true)) {
-                        $mapStatus = $activeBooking->status;
+                    } elseif ($activeBooking->status === 'refund_requested') {
+                        $mapStatus = 'refund_requested';
                     }
-                    // If booking is rejected/cancelled, keep the stall's own status
                 }
             }
 
@@ -121,6 +120,8 @@ class MarketMapController extends Controller
                 'monthly_price'    => $item->stall ? ($item->stall->monthly_price !== null ? (float)$item->stall->monthly_price : null) : null,
                 'entry_fee'        => $item->stall ? ($item->stall->entry_fee !== null ? (float)$item->stall->entry_fee : null) : null,
                 'security_deposit' => $item->stall ? ($item->stall->security_deposit !== null ? (float)$item->stall->security_deposit : null) : null,
+                'has_electricity'  => $item->stall ? (bool)($item->stall->has_electricity ?? true) : true,
+                'has_water'        => $item->stall ? (bool)($item->stall->has_water ?? true) : true,
                 'status'           => $mapStatus,
                 'seller'           => $seller,
             ];
@@ -179,6 +180,8 @@ class MarketMapController extends Controller
             'items.*.monthly_price'    => 'nullable|numeric',
             'items.*.entry_fee'        => 'nullable|numeric',
             'items.*.security_deposit' => 'nullable|numeric',
+            'items.*.has_electricity'  => 'nullable|boolean',
+            'items.*.has_water'        => 'nullable|boolean',
             'items.*.status'           => 'nullable|string|max:20',
         ]);
 
@@ -239,6 +242,8 @@ class MarketMapController extends Controller
                         $monthlyPrice = isset($item['monthly_price']) && $item['monthly_price'] !== null ? (float)$item['monthly_price'] : ($rentalType === 'monthly' ? (float)($item['price'] ?? 5000) : null);
                         $entryFee = isset($item['entry_fee']) && $item['entry_fee'] !== null ? (float)$item['entry_fee'] : null;
                         $securityDeposit = isset($item['security_deposit']) && $item['security_deposit'] !== null ? (float)$item['security_deposit'] : null;
+                        $hasElectricity = isset($item['has_electricity']) ? (bool)$item['has_electricity'] : true;
+                        $hasWater = isset($item['has_water']) ? (bool)$item['has_water'] : true;
 
                         $stallPayload = [
                             'size'             => $item['size'] ?? '3x3 เมตร',
@@ -248,6 +253,8 @@ class MarketMapController extends Controller
                             'monthly_price'    => $rentalType === 'monthly' ? $monthlyPrice : null,
                             'entry_fee'        => $rentalType === 'monthly' ? $entryFee : null,
                             'security_deposit' => $rentalType === 'monthly' ? $securityDeposit : null,
+                            'has_electricity'  => $hasElectricity,
+                            'has_water'        => $hasWater,
                             'status'           => ($item['status'] ?? 'available') === 'repair' ? 'maintenance' : ($item['status'] ?? 'available'),
                         ];
 
