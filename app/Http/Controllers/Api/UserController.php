@@ -121,12 +121,33 @@ class UserController extends Controller
 
     private function uploadProfileImage($file, $oldImage = null)
     {
+        if (!file_exists(storage_path('images'))) {
+            @mkdir(storage_path('images'), 0777, true);
+        }
+
         if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
             @unlink(storage_path('images/' . $oldImage));
         }
 
-        $ext = $file->getClientOriginalExtension() ?: 'png';
-        $filename = time() . '_profile_' . uniqid() . '.' . $ext;
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        $filename = 'user_profile_' . time() . '_' . uniqid() . '.' . $ext;
+        $file->move(storage_path('images'), $filename);
+
+        return $filename;
+    }
+
+    private function uploadDocumentImage($file, $oldImage = null)
+    {
+        if (!file_exists(storage_path('images'))) {
+            @mkdir(storage_path('images'), 0777, true);
+        }
+
+        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
+            @unlink(storage_path('images/' . $oldImage));
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        $filename = 'seller_doc_' . time() . '_' . uniqid() . '.' . $ext;
         $file->move(storage_path('images'), $filename);
 
         return $filename;
@@ -152,6 +173,12 @@ class UserController extends Controller
             'profile_image' => ['nullable'],
             'profile_image_file' => ['nullable'],
             'role' => ['sometimes', Rule::in(['buyer', 'seller', 'admin'])],
+            'status' => ['nullable', 'string'],
+            'citizen_id' => ['nullable', 'string', 'max:20'],
+            'document_status' => ['nullable', 'string'],
+            'document_image' => ['nullable'],
+            'document_image_file' => ['nullable'],
+            'address' => ['nullable', 'string'],
             'interests' => ['nullable'],
         ]);
 
@@ -163,7 +190,7 @@ class UserController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['username', 'phone', 'role']);
+        $data = $request->only(['username', 'phone', 'role', 'status', 'citizen_id', 'document_status', 'address']);
 
         if ($request->has('interests')) {
             $interestsRaw = $request->input('interests');
@@ -195,6 +222,14 @@ class UserController extends Controller
             $data['profile_image'] = $this->uploadProfileImage($request->file('profile_image_file'), $user->profile_image);
         } elseif ($request->hasFile('profile_image')) {
             $data['profile_image'] = $this->uploadProfileImage($request->file('profile_image'), $user->profile_image);
+        }
+
+        if ($request->hasFile('document_image_file')) {
+            $data['document_image'] = $this->uploadDocumentImage($request->file('document_image_file'), $user->document_image);
+        } elseif ($request->hasFile('document_image')) {
+            $data['document_image'] = $this->uploadDocumentImage($request->file('document_image'), $user->document_image);
+        } elseif ($request->filled('document_image') && is_string($request->input('document_image'))) {
+            $data['document_image'] = $request->input('document_image');
         }
 
         if ($request->filled('password')) {
@@ -232,6 +267,10 @@ class UserController extends Controller
 
         if ($user->profile_image && file_exists(storage_path('images/' . $user->profile_image))) {
             @unlink(storage_path('images/' . $user->profile_image));
+        }
+
+        if ($user->document_image && file_exists(storage_path('images/' . $user->document_image))) {
+            @unlink(storage_path('images/' . $user->document_image));
         }
 
         $user->delete();

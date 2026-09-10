@@ -54,7 +54,11 @@ class AnnouncementController extends Controller
         $imagePath = null;
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-            $filename = time() . '_announcement.' . $file->getClientOriginalExtension();
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $filename = 'announcement_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
             $file->storeAs('', $filename, 'custom_images');
             $imagePath = $filename;
         } elseif ($request->filled('image')) {
@@ -118,9 +122,16 @@ class AnnouncementController extends Controller
         if ($request->hasFile('image')) {
             if ($announcement->image && !str_starts_with($announcement->image, 'http')) {
                 \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($announcement->image);
+                if (file_exists(storage_path('images/' . $announcement->image))) {
+                    @unlink(storage_path('images/' . $announcement->image));
+                }
             }
             $file = $request->file('image');
-            $filename = time() . '_announcement.' . $file->getClientOriginalExtension();
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $filename = 'announcement_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
             $file->storeAs('', $filename, 'custom_images');
             $imagePath = $filename;
         } elseif ($request->filled('image')) {

@@ -19,6 +19,7 @@ class ReviewReport extends Model
         'report_reason',
         'report_date',
         'report_status',
+        'admin_note',
     ];
 
     public function review()

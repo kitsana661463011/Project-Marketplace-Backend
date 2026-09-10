@@ -17,6 +17,7 @@ class Payment extends Model
         'amount',
         'payment_date',
         'payment_slip',
+        'destination_bank',
         'status',
         'refund_reason',
         'refund_bank_name',

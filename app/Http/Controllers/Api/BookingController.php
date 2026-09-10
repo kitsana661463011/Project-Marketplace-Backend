@@ -519,12 +519,20 @@ class BookingController extends Controller
 
         if ($request->hasFile('refund_slip_file')) {
             $file = $request->file('refund_slip_file');
-            $filename = time() . '_refund_slip.' . $file->getClientOriginalExtension();
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $filename = 'refund_slip_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
             $file->storeAs('', $filename, 'custom_images');
             $refundSlipFilename = $filename;
         } elseif ($request->hasFile('refund_slip')) {
             $file = $request->file('refund_slip');
-            $filename = time() . '_refund_slip.' . $file->getClientOriginalExtension();
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $filename = 'refund_slip_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
             $file->storeAs('', $filename, 'custom_images');
             $refundSlipFilename = $filename;
         } elseif ($request->filled('refund_slip') && is_string($request->input('refund_slip'))) {

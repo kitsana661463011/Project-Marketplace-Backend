@@ -23,9 +23,20 @@ class Stall extends Model
         'security_deposit',
         'has_electricity',
         'has_water',
+        'image1',
+        'image2',
         'status',
         'zone_id',
     ];
+
+    protected $appends = [
+        'images',
+    ];
+
+    public function getImagesAttribute(): array
+    {
+        return array_values(array_filter([$this->image1, $this->image2]));
+    }
 
     protected $casts = [
         'has_electricity' => 'boolean',

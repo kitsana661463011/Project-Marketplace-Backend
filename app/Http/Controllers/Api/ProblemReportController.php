@@ -36,25 +36,29 @@ class ProblemReportController extends Controller
 
     public function index(Request $request)
     {
-        $query = ProblemReport::query()->with(['user', 'stall']);
+        $reqType = $request->input('type', $request->input('category', 'all'));
+        $normType = $this->normalizeReportType($reqType);
 
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('description', 'like', "%{$search}%")
-                    ->orWhereHas('stall', function ($stallQuery) use ($search) {
-                        $stallQuery->where('stall_number', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('user', function ($userQuery) use ($search) {
-                        $userQuery->where('username', 'like', "%{$search}%");
-                    });
-            });
-        }
+        $reports = collect();
 
-        if ($request->filled('type') || $request->filled('category')) {
-            $reqType = $request->input('type', $request->input('category'));
+        // 1. Fetch from problem_report table unless explicitly filtering feedback only where we prioritize review_report
+        if ($reqType === 'all' || $normType !== 'feedback') {
+            $query = ProblemReport::query()->with(['user', 'stall']);
+
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('description', 'like', "%{$search}%")
+                        ->orWhereHas('stall', function ($stallQuery) use ($search) {
+                            $stallQuery->where('stall_number', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('user', function ($userQuery) use ($search) {
+                            $userQuery->where('username', 'like', "%{$search}%");
+                        });
+                });
+            }
+
             if ($reqType !== 'all') {
-                $normType = $this->normalizeReportType($reqType);
                 $thaiCategoryMap = [
                     'electric' => 'ไฟฟ้า',
                     'water' => 'ประปา',
@@ -68,49 +72,72 @@ class ProblemReportController extends Controller
                     $query->where('description', 'like', "%{$thaiKeyword}%");
                 }
             }
+
+            if ($request->filled('user_id')) {
+                $query->where('user_id', $request->input('user_id'));
+            }
+
+            if ($request->filled('start_date')) {
+                $query->whereDate('report_date', '>=', $request->input('start_date'));
+            }
+
+            if ($request->filled('end_date')) {
+                $query->whereDate('report_date', '<=', $request->input('end_date'));
+            }
+
+            $problemReports = $query->orderByDesc('report_date')->get()->map(function (ProblemReport $report) {
+                $rawType = $this->normalizeReportType($report->description);
+
+                return [
+                    'id' => (string) $report->problem_id,
+                    'problem_id' => $report->problem_id,
+                    'description' => $report->description,
+                    'image' => $report->image,
+                    'report_date' => $report->report_date,
+                    'status' => $report->status,
+                    'report_type' => $rawType,
+                    'admin_note' => $report->admin_comment,
+                    'admin_comment' => $report->admin_comment,
+                    'user_id' => $report->user_id,
+                    'user_name' => $report->user?->username,
+                    'stall_id' => $report->stall_id,
+                    'stall_number' => $report->stall?->stall_number,
+                    'is_review_report' => false,
+                ];
+            });
+
+            $reports = $reports->concat($problemReports);
         }
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->input('user_id'));
+        // 2. Fetch from review_report table if filter is 'all' or 'feedback'
+        if ($reqType === 'all' || $normType === 'feedback') {
+            $reviewCtrl = new ReviewReportController();
+            $reviewReportsResponse = $reviewCtrl->index($request);
+            $reviewReportsData = $reviewReportsResponse->getData(true);
+            if (!empty($reviewReportsData['data']) && is_array($reviewReportsData['data'])) {
+                $reports = $reports->concat($reviewReportsData['data']);
+            }
         }
 
-        if ($request->filled('start_date')) {
-            $query->whereDate('report_date', '>=', $request->input('start_date'));
-        }
-
-        if ($request->filled('end_date')) {
-            $query->whereDate('report_date', '<=', $request->input('end_date'));
-        }
-
-        $reports = $query->orderByDesc('report_date')->get()->map(function (ProblemReport $report) {
-            $rawType = $this->normalizeReportType($report->description);
-
-            return [
-                'id' => $report->problem_id,
-                'problem_id' => $report->problem_id,
-                'description' => $report->description,
-                'image' => $report->image,
-                'report_date' => $report->report_date,
-                'status' => $report->status,
-                'report_type' => $rawType,
-                'admin_note' => $report->admin_comment,
-                'admin_comment' => $report->admin_comment,
-                'user_id' => $report->user_id,
-                'user_name' => $report->user?->username,
-                'stall_id' => $report->stall_id,
-                'stall_number' => $report->stall?->stall_number,
-            ];
-        });
+        // Sort all merged reports descending by report_date
+        $sortedReports = $reports->sortByDesc(function ($item) {
+            return $item['report_date'] ?? '';
+        })->values();
 
         return response()->json([
             'status' => true,
             'message' => 'Problem reports retrieved successfully',
-            'data' => $reports,
+            'data' => $sortedReports,
         ], 200);
     }
 
     public function update(Request $request, $id)
     {
+        if (str_starts_with((string) $id, 'rev_')) {
+            $reviewCtrl = new ReviewReportController();
+            return $reviewCtrl->update($request, $id);
+        }
+
         $validator = Validator::make($request->all(), [
             'status' => ['sometimes', 'in:pending,progress,resolved'],
             'admin_note' => ['nullable', 'string'],
@@ -127,6 +154,13 @@ class ProblemReportController extends Controller
         $report = ProblemReport::find($id);
 
         if (! $report) {
+            // Check if it's a review_report id without 'rev_' prefix
+            $reviewReport = \App\Models\ReviewReport::find($id);
+            if ($reviewReport) {
+                $reviewCtrl = new ReviewReportController();
+                return $reviewCtrl->update($request, (string) $id);
+            }
+
             return response()->json([
                 'status' => false,
                 'message' => 'Problem report not found',
@@ -151,7 +185,7 @@ class ProblemReportController extends Controller
             'status' => true,
             'message' => 'Problem report updated successfully',
             'data' => [
-                'id' => $report->problem_id,
+                'id' => (string) $report->problem_id,
                 'problem_id' => $report->problem_id,
                 'description' => $report->description,
                 'image' => $report->image,
@@ -162,6 +196,7 @@ class ProblemReportController extends Controller
                 'admin_comment' => $report->admin_comment,
                 'user_name' => $report->user?->username,
                 'stall_number' => $report->stall?->stall_number,
+                'is_review_report' => false,
             ],
         ], 200);
     }
@@ -198,7 +233,11 @@ class ProblemReportController extends Controller
         $imageName = null;
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-            $imageName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $imageName = 'problem_report_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
             $file->storeAs('', $imageName, 'custom_images');
         } elseif ($request->filled('image')) {
             $imageName = $request->input('image');

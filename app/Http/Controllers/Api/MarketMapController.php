@@ -36,6 +36,7 @@ class MarketMapController extends Controller
 
         $items = $map->items->map(function ($item) use ($allShops, $allApprovedBookings) {
             $seller = null;
+            $shop = null;
             $mapStatus = 'available'; // default
 
             if ($item->stall) {
@@ -87,6 +88,8 @@ class MarketMapController extends Controller
                         'end_date'       => $activeBooking->end_date ? (string)$activeBooking->end_date : null,
                         'booking_id'     => $activeBooking->booking_id,
                         'booking_status' => $activeBooking->status,
+                        'shop_status'    => $shop ? ($shop->status ?: 'เปิดบริการอยู่') : null,
+                        'is_open'        => $shop ? ($shop->status === 'เปิดบริการอยู่' || strtolower((string)$shop->status) === 'open') : false,
                     ];
 
                     // Override map status based on actual booking status
@@ -122,8 +125,14 @@ class MarketMapController extends Controller
                 'security_deposit' => $item->stall ? ($item->stall->security_deposit !== null ? (float)$item->stall->security_deposit : null) : null,
                 'has_electricity'  => $item->stall ? (bool)($item->stall->has_electricity ?? true) : true,
                 'has_water'        => $item->stall ? (bool)($item->stall->has_water ?? true) : true,
+                'image1'           => $item->stall ? $item->stall->image1 : null,
+                'image2'           => $item->stall ? $item->stall->image2 : null,
+                'images'           => $item->stall ? $item->stall->images : [],
                 'status'           => $mapStatus,
                 'seller'           => $seller,
+                'has_shop'         => $shop !== null,
+                'is_shop_open'     => $shop ? ($shop->status === 'เปิดบริการอยู่' || strtolower((string)$shop->status) === 'open') : false,
+                'shop_status'      => $shop ? ($shop->status ?: 'เปิดบริการอยู่') : null,
             ];
         });
 
@@ -257,6 +266,13 @@ class MarketMapController extends Controller
                             'has_water'        => $hasWater,
                             'status'           => ($item['status'] ?? 'available') === 'repair' ? 'maintenance' : ($item['status'] ?? 'available'),
                         ];
+
+                        if (array_key_exists('image1', $item)) {
+                            $stallPayload['image1'] = $item['image1'];
+                        }
+                        if (array_key_exists('image2', $item)) {
+                            $stallPayload['image2'] = $item['image2'];
+                        }
 
                         // Check if we need to create a new Stall in database
                         if (!$stallId) {

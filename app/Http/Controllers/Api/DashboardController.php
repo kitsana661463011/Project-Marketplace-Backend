@@ -17,7 +17,8 @@ class DashboardController extends Controller
         $occupiedStalls = (int) Stall::where('status', 'occupied')->count();
         $availableStalls = (int) Stall::where('status', 'available')->count();
         $pendingBookings = (int) StallBooking::where('status', 'pending')->count();
-        $pendingReports = (int) ProblemReport::where('status', 'pending')->count();
+        $pendingReports = (int) ProblemReport::where('status', 'pending')->count()
+            + (int) \App\Models\ReviewReport::where('report_status', 'active')->count();
         $totalSellers = (int) DB::table('user')->where('role', 'seller')->where('document_status', 'approved')->count();
         $pendingSellers = (int) DB::table('user')->where('document_status', 'pending')->where(function ($q) {
             $q->where('role', 'buyer')->orWhere('role', 'seller');
@@ -26,8 +27,8 @@ class DashboardController extends Controller
         $totalShopsCount = (int) DB::table('shop')->count();
         $categoryShare = DB::table('shop_category as sc')
             ->leftJoin('shop as s', 'sc.category_id', '=', 's.category_id')
-            ->select('sc.category_id as id', 'sc.category_name as name', DB::raw('COUNT(s.shop_id) as count'))
-            ->groupBy('sc.category_id', 'sc.category_name')
+            ->select('sc.category_id as id', 'sc.category_name as name', 'sc.description', DB::raw('COUNT(s.shop_id) as count'))
+            ->groupBy('sc.category_id', 'sc.category_name', 'sc.description')
             ->orderByDesc('count')
             ->get()
             ->map(function ($item) use ($totalShopsCount) {
@@ -291,6 +292,83 @@ class DashboardController extends Controller
         ], 200);
     }
 
+    public function updateCategory($id, \Illuminate\Http\Request $request)
+    {
+        $request->validate([
+            'category_name' => 'required|string|max:100',
+            'description' => 'nullable|string',
+        ]);
+
+        $category = DB::table('shop_category')->where('category_id', $id)->first();
+        if (! $category) {
+            return response()->json([
+                'status' => false,
+                'message' => 'ไม่พบหมวดหมู่สินค้านี้',
+            ], 404);
+        }
+
+        $name = trim($request->input('category_name'));
+        $desc = trim((string) $request->input('description'));
+
+        $exists = DB::table('shop_category')
+            ->where('category_name', $name)
+            ->where('category_id', '!=', $id)
+            ->exists();
+        if ($exists) {
+            return response()->json([
+                'status' => false,
+                'message' => 'มีหมวดหมู่สินค้านี้อยู่แล้วในระบบ',
+            ], 400);
+        }
+
+        DB::table('shop_category')->where('category_id', $id)->update([
+            'category_name' => $name,
+            'description' => $desc,
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'แก้ไขหมวดหมู่สินค้าเรียบร้อยแล้ว',
+        ], 200);
+    }
+
+    public function updateUserInterest($id, \Illuminate\Http\Request $request)
+    {
+        $request->validate([
+            'interest_name' => 'required|string|max:100',
+        ]);
+
+        $option = DB::table('user_interest_option')->where('interest_id', $id)->first();
+        if (! $option) {
+            return response()->json([
+                'status' => false,
+                'message' => 'ไม่พบตัวเลือกความสนใจนี้',
+            ], 404);
+        }
+
+        $name = trim($request->input('interest_name'));
+
+        $exists = DB::table('user_interest_option')
+            ->where('interest_name', $name)
+            ->where('interest_id', '!=', $id)
+            ->exists();
+        if ($exists) {
+            return response()->json([
+                'status' => false,
+                'message' => 'มีตัวเลือกความสนใจนี้อยู่แล้วในระบบ',
+            ], 400);
+        }
+
+        DB::table('user_interest_option')->where('interest_id', $id)->update([
+            'interest_name' => $name,
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'แก้ไขตัวเลือกความสนใจเรียบร้อยแล้ว',
+        ], 200);
+    }
+
     public function destroyUserInterest($id)
     {
         $option = DB::table('user_interest_option')->where('interest_id', $id)->first();
@@ -316,7 +394,8 @@ class DashboardController extends Controller
     public function badgeCounts()
     {
         $pendingBookings = (int) StallBooking::where('status', 'pending')->count();
-        $pendingReports  = (int) ProblemReport::where('status', 'pending')->count();
+        $pendingReports  = (int) ProblemReport::where('status', 'pending')->count()
+                         + (int) \App\Models\ReviewReport::where('report_status', 'active')->count();
         $pendingSellers  = (int) DB::table('user')->where('document_status', 'pending')->count();
 
         return response()->json([

@@ -26,12 +26,16 @@ class PaymentController extends Controller
 
     private function uploadImage($file, $oldImage = null)
     {
+        if (!file_exists(storage_path('images'))) {
+            @mkdir(storage_path('images'), 0777, true);
+        }
+
         if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
             @unlink(storage_path('images/' . $oldImage));
         }
 
-        $ext = $file->getClientOriginalExtension() ?: 'png';
-        $filename = time() . '_slip_' . uniqid() . '.' . $ext;
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        $filename = 'payment_slip_' . time() . '_' . uniqid() . '.' . $ext;
         $file->move(storage_path('images'), $filename);
 
         return $filename;
@@ -45,6 +49,7 @@ class PaymentController extends Controller
             'payment_date' => ['nullable', 'date'],
             'payment_slip' => ['nullable'],
             'payment_slip_file' => ['nullable'],
+            'destination_bank' => ['nullable', 'string', 'max:100'],
             'status' => ['required', Rule::in(['pending', 'verified', 'rejected', 'refund_requested', 'refunded'])],
             'refund_reason' => ['nullable', 'string'],
             'refund_bank_name' => ['nullable', 'string', 'max:100'],
@@ -63,7 +68,7 @@ class PaymentController extends Controller
         }
 
         $data = $request->only([
-            'booking_id', 'amount', 'payment_date', 'payment_slip', 'status',
+            'booking_id', 'amount', 'payment_date', 'payment_slip', 'destination_bank', 'status',
             'refund_reason', 'refund_bank_name', 'refund_account_number', 'refund_account_name', 'refund_slip', 'refunded_at'
         ]);
 
@@ -157,6 +162,13 @@ class PaymentController extends Controller
                 'message' => 'Payment not found',
                 'data' => null,
             ], 404);
+        }
+
+        if ($payment->payment_slip && file_exists(storage_path('images/' . $payment->payment_slip))) {
+            @unlink(storage_path('images/' . $payment->payment_slip));
+        }
+        if ($payment->refund_slip && file_exists(storage_path('images/' . $payment->refund_slip))) {
+            @unlink(storage_path('images/' . $payment->refund_slip));
         }
 
         $payment->delete();

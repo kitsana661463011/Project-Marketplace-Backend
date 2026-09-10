@@ -21,6 +21,23 @@ class StallController extends Controller
         ], 200);
     }
 
+    private function uploadStallImage($file, $oldImage = null, $slot = 'img1')
+    {
+        if (!file_exists(storage_path('images'))) {
+            @mkdir(storage_path('images'), 0777, true);
+        }
+
+        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
+            @unlink(storage_path('images/' . $oldImage));
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        $filename = 'stall_' . $slot . '_' . time() . '_' . uniqid() . '.' . $ext;
+        $file->move(storage_path('images'), $filename);
+
+        return $filename;
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -34,6 +51,8 @@ class StallController extends Controller
             'security_deposit' => ['nullable', 'numeric'],
             'has_electricity' => ['nullable', 'boolean'],
             'has_water' => ['nullable', 'boolean'],
+            'image1' => ['nullable'],
+            'image2' => ['nullable'],
             'status' => ['required', Rule::in(['available', 'occupied', 'maintenance'])],
             'zone_id' => ['required', 'integer', 'exists:market_zone,zone_id'],
             'start_date' => ['nullable', 'date'],
@@ -65,11 +84,29 @@ class StallController extends Controller
             $data['price'] = $data['daily_price'];
         }
 
-        $stall = Stall::create($data);
+        $existingStall = Stall::where('stall_number', $data['stall_number'])->first();
+        if ($existingStall) {
+            if ($request->hasFile('image1')) {
+                $data['image1'] = $this->uploadStallImage($request->file('image1'), $existingStall->image1, 'img1');
+            }
+            if ($request->hasFile('image2')) {
+                $data['image2'] = $this->uploadStallImage($request->file('image2'), $existingStall->image2, 'img2');
+            }
+            $existingStall->update($data);
+            $stall = $existingStall;
+        } else {
+            if ($request->hasFile('image1')) {
+                $data['image1'] = $this->uploadStallImage($request->file('image1'), null, 'img1');
+            }
+            if ($request->hasFile('image2')) {
+                $data['image2'] = $this->uploadStallImage($request->file('image2'), null, 'img2');
+            }
+            $stall = Stall::create($data);
+        }
 
         return response()->json([
             'status' => true,
-            'message' => 'Stall created successfully',
+            'message' => 'Stall saved successfully',
             'data' => $stall,
         ], 201);
     }
@@ -116,6 +153,10 @@ class StallController extends Controller
             'security_deposit' => ['nullable', 'numeric'],
             'has_electricity' => ['nullable', 'boolean'],
             'has_water' => ['nullable', 'boolean'],
+            'image1' => ['nullable'],
+            'image2' => ['nullable'],
+            'remove_image1' => ['nullable', 'boolean'],
+            'remove_image2' => ['nullable', 'boolean'],
             'status' => ['sometimes', Rule::in(['available', 'occupied', 'maintenance'])],
             'zone_id' => ['sometimes', 'integer', 'exists:market_zone,zone_id'],
             'start_date' => ['nullable', 'date'],
@@ -140,6 +181,24 @@ class StallController extends Controller
             $data['price'] = $data['daily_price'];
         }
 
+        if ($request->boolean('remove_image1')) {
+            if ($stall->image1 && file_exists(storage_path('images/' . $stall->image1))) {
+                @unlink(storage_path('images/' . $stall->image1));
+            }
+            $data['image1'] = null;
+        } elseif ($request->hasFile('image1')) {
+            $data['image1'] = $this->uploadStallImage($request->file('image1'), $stall->image1, 'img1');
+        }
+
+        if ($request->boolean('remove_image2')) {
+            if ($stall->image2 && file_exists(storage_path('images/' . $stall->image2))) {
+                @unlink(storage_path('images/' . $stall->image2));
+            }
+            $data['image2'] = null;
+        } elseif ($request->hasFile('image2')) {
+            $data['image2'] = $this->uploadStallImage($request->file('image2'), $stall->image2, 'img2');
+        }
+
         $stall->update($data);
 
         return response()->json([
@@ -159,6 +218,13 @@ class StallController extends Controller
                 'message' => 'Stall not found',
                 'data' => null,
             ], 404);
+        }
+
+        if ($stall->image1 && file_exists(storage_path('images/' . $stall->image1))) {
+            @unlink(storage_path('images/' . $stall->image1));
+        }
+        if ($stall->image2 && file_exists(storage_path('images/' . $stall->image2))) {
+            @unlink(storage_path('images/' . $stall->image2));
         }
 
         $stall->delete();
