@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Stall;
 use App\Models\StallBooking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -38,6 +40,8 @@ class BookingController extends Controller
                 'sb.booking_date',
                 'sb.start_date',
                 'sb.end_date',
+                'sb.renewal_end_date',
+                'sb.renewal_amount',
                 'sb.status',
                 'sb.reject_reason',
                 'u.username as user_name',
@@ -249,7 +253,16 @@ class BookingController extends Controller
 
         try {
             DB::transaction(function () use ($booking) {
-                $booking->update(['status' => 'approved']);
+                $updateData = ['status' => 'approved'];
+                if ($booking->status === 'renewal_pending' && $booking->renewal_end_date) {
+                    $updateData['end_date'] = $booking->renewal_end_date;
+                    if ($booking->renewal_amount) {
+                        $updateData['total_amount'] = (float) $booking->total_amount + (float) $booking->renewal_amount;
+                    }
+                    $updateData['renewal_end_date'] = null;
+                    $updateData['renewal_amount'] = null;
+                }
+                $booking->update($updateData);
 
                 $payment = Payment::where('booking_id', $booking->booking_id)->first();
                 if ($payment) {
@@ -279,6 +292,24 @@ class BookingController extends Controller
 
         $booking->refresh();
         $booking->load(['user', 'stall', 'payment']);
+
+        try {
+            $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
+            $isRenewal = ($booking->renewal_end_date != null);
+            $msg = $isRenewal
+                ? "🎉 คำขอต่อสัญญาแผงค้า {$stallNumber} ได้รับการอนุมัติแล้ว (ขยายสัญญาถึง: {$booking->end_date})"
+                : "🎉 คำขอจองแผงค้า {$stallNumber} ได้รับการอนุมัติเรียบร้อยแล้ว สามารถเริ่มเข้าใช้งานแผงค้าได้";
+
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'message' => $msg,
+                'notify_date' => now(),
+                'type' => 'booking',
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create booking approve notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => true,
@@ -402,6 +433,20 @@ class BookingController extends Controller
 
         $booking->refresh();
         $booking->load(['user', 'stall', 'payment']);
+
+        try {
+            $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
+            $reasonText = $rejectReason ? ": {$rejectReason}" : '';
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'message' => "❌ คำขอจองแผงค้า {$stallNumber} ถูกปฏิเสธ{$reasonText}",
+                'notify_date' => now(),
+                'type' => 'booking',
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create booking reject notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => true,
@@ -582,10 +627,168 @@ class BookingController extends Controller
         $booking->refresh();
         $booking->load(['user', 'stall', 'payment']);
 
+        try {
+            $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'message' => "💵 ดำเนินการโอนเงินคืนสำหรับแผงค้า {$stallNumber} เรียบร้อยแล้ว (สามารถตรวจสอบหลักฐานสลิปการโอนได้ในประวัติการจอง)",
+                'notify_date' => now(),
+                'type' => 'refund',
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create refund notification: ' . $e->getMessage());
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Refund processed successfully',
             'data' => $booking,
+        ], 200);
+    }
+
+    public function renew(Request $request, $booking_id)
+    {
+        $booking = StallBooking::find($booking_id);
+
+        if (!$booking) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Booking not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'renewal_end_date' => ['required', 'date', 'after:end_date'],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'slip' => ['nullable'],
+            'slip_file' => ['nullable', 'image', 'mimes:png,jpg,jpeg', 'max:5120'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed',
+                'data' => $validator->errors(),
+            ], 422);
+        }
+
+        $slipFilename = null;
+        if ($request->hasFile('slip_file')) {
+            $file = $request->file('slip_file');
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $filename = 'renewal_slip_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
+            $file->storeAs('', $filename, 'custom_images');
+            $slipFilename = $filename;
+        } elseif ($request->hasFile('slip')) {
+            $file = $request->file('slip');
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $filename = 'renewal_slip_' . time() . '_' . uniqid() . '.' . $ext;
+            if (!file_exists(storage_path('images'))) {
+                @mkdir(storage_path('images'), 0777, true);
+            }
+            $file->storeAs('', $filename, 'custom_images');
+            $slipFilename = $filename;
+        } elseif ($request->filled('slip') && is_string($request->input('slip'))) {
+            $slipFilename = $request->input('slip');
+        }
+
+        try {
+            DB::transaction(function () use ($booking, $request, $slipFilename) {
+                $booking->update([
+                    'status' => 'renewal_pending',
+                    'renewal_end_date' => $request->input('renewal_end_date'),
+                    'renewal_amount' => $request->input('amount'),
+                ]);
+
+                $payment = Payment::where('booking_id', $booking->booking_id)->first();
+                $renewalRemark = 'ต่อสัญญาถึง ' . $request->input('renewal_end_date');
+                if ($payment) {
+                    $payment->update([
+                        'amount' => $request->input('amount'),
+                        'payment_date' => now()->format('Y-m-d'),
+                        'payment_slip' => $slipFilename ?? $payment->payment_slip,
+                        'status' => 'pending',
+                        'remark' => $renewalRemark,
+                    ]);
+                } else {
+                    Payment::create([
+                        'booking_id' => $booking->booking_id,
+                        'amount' => $request->input('amount'),
+                        'payment_date' => now()->format('Y-m-d'),
+                        'payment_slip' => $slipFilename,
+                        'status' => 'pending',
+                        'remark' => $renewalRemark,
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Renewal request failed',
+                'data' => $e->getMessage(),
+            ], 500);
+        }
+
+        $booking->refresh();
+        $booking->load(['user', 'stall', 'payment']);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Renewal requested successfully',
+            'data' => $booking,
+        ], 200);
+    }
+
+    public function expiringSoon(Request $request)
+    {
+        $userId = $request->input('user_id');
+        $query = DB::table('stall_booking as sb')
+            ->leftJoin('user as u', 'u.user_id', '=', 'sb.user_id')
+            ->leftJoin('stall as s', 's.stall_id', '=', 'sb.stall_id')
+            ->leftJoin('market_zone as mz', 'mz.zone_id', '=', 's.zone_id')
+            ->select(
+                'sb.booking_id',
+                'sb.user_id',
+                'sb.stall_id',
+                'sb.rental_type',
+                'sb.daily_price',
+                'sb.monthly_price',
+                'sb.start_date',
+                'sb.end_date',
+                'sb.renewal_end_date',
+                'sb.renewal_amount',
+                'sb.status',
+                's.stall_number',
+                'mz.zone_name'
+            )
+            ->where('sb.status', 'approved');
+
+        if ($userId) {
+            $query->where('sb.user_id', $userId);
+        }
+
+        $today = now()->startOfDay();
+        $fiveDaysLater = now()->addDays(5)->endOfDay();
+
+        $query->whereBetween('sb.end_date', [$today->format('Y-m-d'), $fiveDaysLater->format('Y-m-d')]);
+
+        $expiringBookings = $query->orderBy('sb.end_date', 'asc')->get()->map(function ($b) use ($today) {
+            $endDate = \Carbon\Carbon::parse($b->end_date)->startOfDay();
+            $daysLeft = $today->diffInDays($endDate, false);
+            $b->days_left = max(0, (int)$daysLeft);
+            $b->is_expiring_soon = true;
+            return $b;
+        });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Expiring bookings retrieved successfully',
+            'data' => $expiringBookings,
         ], 200);
     }
 }

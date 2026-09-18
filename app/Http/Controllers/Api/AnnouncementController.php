@@ -18,11 +18,31 @@ class AnnouncementController extends Controller
             $query->where('title', 'like', "%{$search}%");
         }
 
+        if ($request->filled('filter')) {
+            $filter = $request->input('filter');
+            if ($filter === 'active') {
+                $query->activeRange();
+            } elseif ($filter === 'history' || $filter === 'expired') {
+                $query->expired();
+            } elseif ($filter === 'scheduled') {
+                $query->scheduled();
+            }
+        }
+
+        if ($request->filled('category') && $request->input('category') !== 'all') {
+            $cat = $request->input('category');
+            if ($cat === 'event') $cat = 'activity';
+            $query->where('announcement_type', $cat);
+        }
+
+        $userId = $request->input('user_id') ?: $request->user()?->user_id;
+        $readIds = $userId ? \App\Models\UserAnnouncementRead::where('user_id', $userId)->pluck('announcement_id')->toArray() : null;
+
         $announcements = $query
             ->orderByRaw("CASE WHEN announcement_type = 'urgent' THEN 0 WHEN announcement_type = 'activity' THEN 1 ELSE 2 END")
             ->orderByDesc('publish_date')
-            ->get()->map(function (Announcement $announcement) {
-            return $this->formatAnnouncement($announcement);
+            ->get()->map(function (Announcement $announcement) use ($readIds) {
+            return $this->formatAnnouncement($announcement, $readIds);
         });
 
         return response()->json([
@@ -39,6 +59,8 @@ class AnnouncementController extends Controller
             'announcement_type' => ['required', 'in:urgent,activity,general'],
             'description' => ['nullable', 'string'],
             'image' => ['nullable'],
+            'publish_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:publish_date'],
             'status' => ['nullable', 'in:active,inactive'],
             'user_id' => ['nullable', 'integer'],
         ]);
@@ -70,7 +92,8 @@ class AnnouncementController extends Controller
             'title' => $request->input('title'),
             'announcement_type' => $request->input('announcement_type'),
             'description' => $request->input('description'),
-            'publish_date' => now(),
+            'publish_date' => $request->filled('publish_date') ? $request->input('publish_date') : now(),
+            'end_date' => $request->filled('end_date') ? $request->input('end_date') : null,
             'status' => $request->input('status', 'active'),
             'user_id' => $request->input('user_id', 1),
         ];
@@ -95,6 +118,8 @@ class AnnouncementController extends Controller
             'announcement_type' => ['sometimes', 'in:urgent,activity,general'],
             'description' => ['nullable', 'string'],
             'image' => ['nullable'],
+            'publish_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date'],
             'status' => ['sometimes', 'in:active,inactive'],
         ]);
 
@@ -117,6 +142,13 @@ class AnnouncementController extends Controller
         }
 
         $announcement->fill($request->only(['title', 'announcement_type', 'description', 'status']));
+
+        if ($request->has('publish_date')) {
+            $announcement->publish_date = $request->input('publish_date') ?: now();
+        }
+        if ($request->has('end_date')) {
+            $announcement->end_date = $request->input('end_date') ?: null;
+        }
 
         $imagePath = null;
         if ($request->hasFile('image')) {
@@ -202,8 +234,108 @@ class AnnouncementController extends Controller
         ], 200);
     }
 
-    protected function formatAnnouncement(Announcement $announcement): array
+    public function markAsRead(Request $request, $id)
     {
+        $userId = $request->input('user_id') ?: $request->user()?->user_id;
+        if (!$userId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User ID is required',
+            ], 400);
+        }
+
+        $announcement = Announcement::find($id);
+        if (!$announcement) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Announcement not found',
+            ], 404);
+        }
+
+        \App\Models\UserAnnouncementRead::updateOrCreate(
+            ['user_id' => $userId, 'announcement_id' => $id],
+            ['read_at' => now()]
+        );
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Announcement marked as read',
+        ], 200);
+    }
+
+    public function markAllAsRead(Request $request)
+    {
+        $userId = $request->input('user_id') ?: $request->user()?->user_id;
+        if (!$userId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User ID is required',
+            ], 400);
+        }
+
+        $activeIds = Announcement::where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('end_date')->orWhere('end_date', '>=', now());
+            })
+            ->pluck('announcement_id');
+
+        foreach ($activeIds as $announcementId) {
+            \App\Models\UserAnnouncementRead::updateOrCreate(
+                ['user_id' => $userId, 'announcement_id' => $announcementId],
+                ['read_at' => now()]
+            );
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'All announcements marked as read',
+        ], 200);
+    }
+
+    public function unreadCount(Request $request)
+    {
+        $userId = $request->input('user_id') ?: $request->user()?->user_id;
+        if (!$userId) {
+            return response()->json([
+                'status' => true,
+                'data' => ['unread_count' => 0],
+            ], 200);
+        }
+
+        $activeIds = Announcement::where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('end_date')->orWhere('end_date', '>=', now());
+            })
+            ->pluck('announcement_id')
+            ->toArray();
+
+        $readIds = \App\Models\UserAnnouncementRead::where('user_id', $userId)
+            ->whereIn('announcement_id', $activeIds)
+            ->pluck('announcement_id')
+            ->toArray();
+
+        $unreadCount = count(array_diff($activeIds, $readIds));
+
+        return response()->json([
+            'status' => true,
+            'data' => ['unread_count' => max(0, $unreadCount)],
+        ], 200);
+    }
+
+    protected function formatAnnouncement(Announcement $announcement, ?array $readIds = null): array
+    {
+        $publishDate = $announcement->publish_date ? \Carbon\Carbon::parse($announcement->publish_date) : null;
+        $endDate = $announcement->end_date ? \Carbon\Carbon::parse($announcement->end_date) : null;
+
+        $isExpired = $endDate ? $endDate->isPast() : false;
+        $isScheduled = $publishDate ? $publishDate->isFuture() : false;
+        $isActive = ($announcement->status === 'active') && ! $isExpired && ! $isScheduled;
+
+        $isRead = false;
+        if ($readIds !== null) {
+            $isRead = in_array($announcement->announcement_id, $readIds);
+        }
+
         return [
             'announcement_id' => $announcement->announcement_id,
             'title' => $announcement->title,
@@ -211,7 +343,12 @@ class AnnouncementController extends Controller
             'description' => $announcement->description,
             'image' => $announcement->image,
             'publish_date' => $this->serializeDate($announcement->publish_date),
+            'end_date' => $this->serializeDate($announcement->end_date),
             'status' => $announcement->status,
+            'is_active' => $isActive,
+            'is_expired' => $isExpired,
+            'is_scheduled' => $isScheduled,
+            'is_read' => $isRead,
             'user_id' => $announcement->user_id,
             'user_name' => $announcement->user?->username,
         ];

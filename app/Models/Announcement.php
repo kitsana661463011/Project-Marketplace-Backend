@@ -18,9 +18,37 @@ class Announcement extends Model
         'description',
         'image',
         'publish_date',
+        'end_date',
         'status',
         'user_id',
     ];
+
+    protected $casts = [
+        'publish_date' => 'datetime',
+        'end_date' => 'datetime',
+    ];
+
+    public function scopeActiveRange($query)
+    {
+        $now = now();
+        return $query->where('status', 'active')
+            ->where(function ($q) use ($now) {
+                $q->whereNull('publish_date')->orWhere('publish_date', '<=', $now);
+            })
+            ->where(function ($q) use ($now) {
+                $q->whereNull('end_date')->orWhere('end_date', '>=', $now);
+            });
+    }
+
+    public function scopeExpired($query)
+    {
+        return $query->whereNotNull('end_date')->where('end_date', '<', now());
+    }
+
+    public function scopeScheduled($query)
+    {
+        return $query->whereNotNull('publish_date')->where('publish_date', '>', now());
+    }
 
     public function user()
     {

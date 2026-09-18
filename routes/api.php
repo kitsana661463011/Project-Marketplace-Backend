@@ -18,6 +18,8 @@ use App\Http\Controllers\Api\FollowShopController;
 use App\Http\Controllers\Api\ShopReviewController;
 use App\Http\Controllers\Api\ReviewReportController;
 use App\Http\Controllers\Api\PasswordResetController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 $serveImage = function ($filename) {
@@ -40,6 +42,8 @@ $serveImage = function ($filename) {
 Route::get('images/{filename}', $serveImage)->where('filename', '.*');
 
 Route::prefix('admin')->group(function () {
+    Route::post('login', [AuthController::class, 'login']);
+    Route::match(['put', 'post'], 'profile', [AuthController::class, 'updateProfile']);
     Route::get('sellers', [SellerManagementController::class, 'index']);
     Route::get('sellers/pending', [SellerManagementController::class, 'pending']);
     Route::put('sellers/{id}/approve', [SellerManagementController::class, 'approve']);
@@ -58,6 +62,8 @@ Route::prefix('admin')->group(function () {
 });
 
 Route::prefix('v1')->group(function () use ($serveImage) {
+    Route::post('admin/login', [AuthController::class, 'login']);
+    Route::match(['put', 'post'], 'admin/profile', [AuthController::class, 'updateProfile']);
     Route::get('images/{filename}', $serveImage)->where('filename', '.*');
     Route::post('forgot-password', [PasswordResetController::class, 'sendResetCode']);
     Route::post('verify-reset-code', [PasswordResetController::class, 'verifyResetCode']);
@@ -88,6 +94,7 @@ Route::prefix('v1')->group(function () use ($serveImage) {
     Route::delete('user-interests/{id}', [DashboardController::class, 'destroyUserInterest']);
     Route::get('maps/{id}', [MarketMapController::class, 'show']);
     Route::put('maps/{id}/items', [MarketMapController::class, 'saveItems']);
+    Route::match(['put', 'post'], 'users/{id}', [UserController::class, 'update']);
     Route::apiResource('users', UserController::class);
     Route::apiResource('shops', ShopController::class);
     Route::apiResource('items', ItemController::class);
@@ -102,6 +109,13 @@ Route::prefix('v1')->group(function () use ($serveImage) {
     Route::post('problem-reports', [ProblemReportController::class, 'store']);
     Route::get('problem-reports', [ProblemReportController::class, 'index']);
 
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
+
+    Route::get('bookings/expiring-soon', [BookingController::class, 'expiringSoon']);
     Route::get('bookings', [BookingController::class, 'index']);
     Route::get('bookings/{booking_id}', [BookingController::class, 'show']);
     Route::post('bookings', [BookingController::class, 'store']);
@@ -111,6 +125,7 @@ Route::prefix('v1')->group(function () use ($serveImage) {
     Route::put('bookings/{booking_id}/pending', [BookingController::class, 'pending']);
     Route::put('bookings/{booking_id}/hold', [BookingController::class, 'hold']);
     Route::put('bookings/{booking_id}/reject', [BookingController::class, 'reject']);
+    Route::match(['put', 'post'], 'bookings/{booking_id}/renew', [BookingController::class, 'renew']);
     Route::put('bookings/{booking_id}/request-refund', [BookingController::class, 'requestRefund']);
     Route::match(['put', 'post'], 'bookings/{booking_id}/approve-refund', [BookingController::class, 'approveRefund']);
 
@@ -118,6 +133,7 @@ Route::prefix('v1')->group(function () use ($serveImage) {
     Route::get('admin/sellers/pending', [SellerManagementController::class, 'pending']);
     Route::put('admin/sellers/{id}/approve', [SellerManagementController::class, 'approve']);
     Route::put('admin/sellers/{id}/reject', [SellerManagementController::class, 'reject']);
+    Route::put('admin/sellers/{id}/status', [SellerManagementController::class, 'updateStatus']);
     Route::get('admin/problem-reports', [ProblemReportController::class, 'index']);
     Route::put('admin/problem-reports/{id}', [ProblemReportController::class, 'update']);
     Route::get('admin/review-reports', [ReviewReportController::class, 'index']);
@@ -126,8 +142,16 @@ Route::prefix('v1')->group(function () use ($serveImage) {
     Route::delete('admin/review-reports/{id}', [ReviewReportController::class, 'destroy']);
 
     Route::get('admin/announcements', [AnnouncementController::class, 'index']);
+    Route::get('admin/announcements/unread-count', [AnnouncementController::class, 'unreadCount']);
+    Route::post('admin/announcements/read-all', [AnnouncementController::class, 'markAllAsRead']);
+    Route::post('admin/announcements/{id}/read', [AnnouncementController::class, 'markAsRead']);
     Route::post('admin/announcements', [AnnouncementController::class, 'store']);
     Route::match(['put', 'post'], 'admin/announcements/{id}', [AnnouncementController::class, 'update']);
     Route::delete('admin/announcements/{id}', [AnnouncementController::class, 'destroy']);
     Route::patch('admin/announcements/{id}/toggle-status', [AnnouncementController::class, 'toggleStatus']);
+
+    Route::get('announcements', [AnnouncementController::class, 'index']);
+    Route::get('announcements/unread-count', [AnnouncementController::class, 'unreadCount']);
+    Route::post('announcements/read-all', [AnnouncementController::class, 'markAllAsRead']);
+    Route::post('announcements/{id}/read', [AnnouncementController::class, 'markAsRead']);
 });

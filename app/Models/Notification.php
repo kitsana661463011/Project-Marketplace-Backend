@@ -16,6 +16,13 @@ class Notification extends Model
         'user_id',
         'message',
         'notify_date',
+        'is_read',
+        'type',
+    ];
+
+    protected $casts = [
+        'is_read' => 'boolean',
+        'notify_date' => 'datetime',
     ];
 
     public function user()

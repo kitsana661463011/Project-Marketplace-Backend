@@ -176,6 +176,7 @@ class UserController extends Controller
             'status' => ['nullable', 'string'],
             'citizen_id' => ['nullable', 'string', 'max:20'],
             'document_status' => ['nullable', 'string'],
+            'submission_date' => ['nullable', 'string'],
             'document_image' => ['nullable'],
             'document_image_file' => ['nullable'],
             'address' => ['nullable', 'string'],
@@ -190,7 +191,7 @@ class UserController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['username', 'phone', 'role', 'status', 'citizen_id', 'document_status', 'address']);
+        $data = $request->only(['username', 'phone', 'role', 'status', 'citizen_id', 'document_status', 'submission_date', 'address']);
 
         if ($request->has('interests')) {
             $interestsRaw = $request->input('interests');

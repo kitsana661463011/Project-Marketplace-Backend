@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ReviewReport;
 use App\Models\ShopReview;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -47,6 +48,10 @@ class ReviewReportController extends Controller
             $query->whereDate('report_date', '>=', $request->input('start_date'));
         }
 
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->input('user_id'));
+        }
+
         if ($request->filled('end_date')) {
             $query->whereDate('report_date', '<=', $request->input('end_date'));
         }
@@ -58,7 +63,9 @@ class ReviewReportController extends Controller
                 $firstImage = $images[0];
             } elseif (is_string($images) && !empty($images)) {
                 $decoded = json_decode($images, true);
-                $firstImage = is_array($decoded) && count($decoded) > 0 ? $decoded[0] : $images;
+                if (is_array($decoded) && count($decoded) > 0) {
+                    $firstImage = $decoded[0];
+                }
             }
 
             $rawStatus = $report->report_status ?: 'active';
@@ -68,6 +75,17 @@ class ReviewReportController extends Controller
                 'resolved', 'inactive', 'dismissed' => 'resolved',
                 default => 'pending',
             };
+
+            // Calculate hidden review strike count for this reviewer
+            $reviewerUserId = $report->review?->user_id;
+            $hiddenCount = 0;
+            $reviewerStatus = 'active';
+            if ($reviewerUserId) {
+                $hiddenCount = ShopReview::where('user_id', $reviewerUserId)
+                    ->where('status', 'hidden')
+                    ->count();
+                $reviewerStatus = $report->review?->user?->status ?? 'active';
+            }
 
             return [
                 'id' => 'rev_' . $report->report_id,
@@ -94,7 +112,10 @@ class ReviewReportController extends Controller
                     'report_status' => $report->report_status,
                     'shop_name' => $report->review?->shop?->shop_name ?? 'ไม่ระบุ',
                     'shop_id' => $report->review?->shop_id,
+                    'reviewer_id' => $reviewerUserId,
                     'reviewer_name' => $report->review?->user?->username ?? 'ไม่ระบุ',
+                    'reviewer_status' => $reviewerStatus,
+                    'strike_count' => $hiddenCount,
                     'rating' => $report->review?->rating ?? 5,
                     'comment' => $report->review?->comment ?? '',
                     'review_status' => $report->review?->status ?? 'show',
@@ -158,26 +179,75 @@ class ReviewReportController extends Controller
             ], 404);
         }
 
-        if ($request->filled('status')) {
-            $statusInput = $request->input('status');
-            $report->report_status = match ($statusInput) {
-                'pending' => 'active',
-                'resolved' => 'resolved',
-                'progress' => 'progress',
-                'dismissed' => 'dismissed',
-                default => $statusInput,
-            };
-        }
+        // Support direct decision action: hide_and_strike, dismiss, ban_user
+        $action = $request->input('action');
+        $autoBanned = false;
+        $reviewerUserId = $report->review?->user_id;
 
-        if ($request->has('admin_note')) {
-            $report->admin_note = $request->input('admin_note');
-        }
+        if ($action === 'hide_and_strike') {
+            if ($report->review) {
+                $report->review->status = 'hidden';
+                $report->review->save();
+            }
+            $report->report_status = 'resolved';
+            if ($request->has('admin_note')) {
+                $report->admin_note = $request->input('admin_note');
+            }
+            $report->save();
 
-        $report->save();
+            // Calculate updated strike count
+            $hiddenCount = ShopReview::where('user_id', $reviewerUserId)->where('status', 'hidden')->count();
+            if ($hiddenCount >= 5 && $reviewerUserId) {
+                User::where('user_id', $reviewerUserId)->update(['status' => 'suspended']);
+                $autoBanned = true;
+            }
+        } elseif ($action === 'dismiss') {
+            if ($report->review) {
+                $report->review->status = 'show';
+                $report->review->save();
+            }
+            $report->report_status = 'dismissed';
+            if ($request->has('admin_note')) {
+                $report->admin_note = $request->input('admin_note');
+            }
+            $report->save();
+        } elseif ($action === 'ban_user') {
+            if ($reviewerUserId) {
+                User::where('user_id', $reviewerUserId)->update(['status' => 'suspended']);
+            }
+            if ($report->review) {
+                $report->review->status = 'hidden';
+                $report->review->save();
+            }
+            $report->report_status = 'resolved';
+            if ($request->has('admin_note')) {
+                $report->admin_note = $request->input('admin_note');
+            }
+            $report->save();
+            $autoBanned = true;
+        } else {
+            // Standard update fallback
+            if ($request->filled('status')) {
+                $statusInput = $request->input('status');
+                $report->report_status = match ($statusInput) {
+                    'pending' => 'active',
+                    'resolved' => 'resolved',
+                    'progress' => 'progress',
+                    'dismissed' => 'dismissed',
+                    default => $statusInput,
+                };
+            }
 
-        if ($request->has('review_status') && $report->review) {
-            $report->review->status = $request->input('review_status');
-            $report->review->save();
+            if ($request->has('admin_note')) {
+                $report->admin_note = $request->input('admin_note');
+            }
+
+            $report->save();
+
+            if ($request->has('review_status') && $report->review) {
+                $report->review->status = $request->input('review_status');
+                $report->review->save();
+            }
         }
 
         $rawStatus = $report->report_status ?: 'active';
@@ -188,9 +258,18 @@ class ReviewReportController extends Controller
             default => 'pending',
         };
 
+        // Recalculate strike count and user status
+        $hiddenCount = 0;
+        $reviewerStatus = 'active';
+        if ($reviewerUserId) {
+            $hiddenCount = ShopReview::where('user_id', $reviewerUserId)->where('status', 'hidden')->count();
+            $reviewerUser = User::find($reviewerUserId);
+            $reviewerStatus = $reviewerUser?->status ?? 'active';
+        }
+
         return response()->json([
             'status' => true,
-            'message' => 'Review report updated successfully',
+            'message' => 'บันทึกการดำเนินการเรียบร้อยแล้ว',
             'data' => [
                 'id' => 'rev_' . $report->report_id,
                 'problem_id' => 'rev_' . $report->report_id,
@@ -200,6 +279,9 @@ class ReviewReportController extends Controller
                 'report_status_raw' => $rawStatus,
                 'admin_note' => $report->admin_note,
                 'review_status' => $report->review?->status ?? 'show',
+                'strike_count' => $hiddenCount,
+                'reviewer_status' => $reviewerStatus,
+                'auto_banned' => $autoBanned,
             ],
         ], 200);
     }
@@ -221,12 +303,25 @@ class ReviewReportController extends Controller
         $report->review->status = $newStatus;
         $report->review->save();
 
+        $reviewerUserId = $report->review->user_id;
+        $autoBanned = false;
+        $hiddenCount = 0;
+        if ($reviewerUserId) {
+            $hiddenCount = ShopReview::where('user_id', $reviewerUserId)->where('status', 'hidden')->count();
+            if ($newStatus === 'hidden' && $hiddenCount >= 5) {
+                User::where('user_id', $reviewerUserId)->update(['status' => 'suspended']);
+                $autoBanned = true;
+            }
+        }
+
         return response()->json([
             'status' => true,
             'message' => $newStatus === 'hidden' ? 'ซ่อนความคิดเห็นเรียบร้อยแล้ว' : 'เปิดแสดงความคิดเห็นตามปกติแล้ว',
             'data' => [
                 'review_id' => $report->review->review_id,
                 'review_status' => $newStatus,
+                'strike_count' => $hiddenCount,
+                'auto_banned' => $autoBanned,
             ],
         ], 200);
     }

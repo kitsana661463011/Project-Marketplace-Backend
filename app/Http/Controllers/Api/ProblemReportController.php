@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Notification;
 use App\Models\ProblemReport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class ProblemReportController extends Controller
 {
@@ -111,11 +114,15 @@ class ProblemReportController extends Controller
 
         // 2. Fetch from review_report table if filter is 'all' or 'feedback'
         if ($reqType === 'all' || $normType === 'feedback') {
-            $reviewCtrl = new ReviewReportController();
-            $reviewReportsResponse = $reviewCtrl->index($request);
-            $reviewReportsData = $reviewReportsResponse->getData(true);
-            if (!empty($reviewReportsData['data']) && is_array($reviewReportsData['data'])) {
-                $reports = $reports->concat($reviewReportsData['data']);
+            $isAdminRequest = $request->is('api/admin/*') || $request->header('X-Admin-Request') === 'true';
+            // Only include review reports if it is an admin request or if user_id is specified (personal reports)
+            if ($isAdminRequest || $request->filled('user_id')) {
+                $reviewCtrl = new ReviewReportController();
+                $reviewReportsResponse = $reviewCtrl->index($request);
+                $reviewReportsData = $reviewReportsResponse->getData(true);
+                if (!empty($reviewReportsData['data']) && is_array($reviewReportsData['data'])) {
+                    $reports = $reports->concat($reviewReportsData['data']);
+                }
             }
         }
 
@@ -178,6 +185,25 @@ class ProblemReportController extends Controller
 
         $report->fill($payload);
         $report->save();
+
+        try {
+            $statusThai = match ($report->status) {
+                'progress' => 'กำลังดำเนินการ',
+                'resolved' => 'แก้ไข/เสร็จสิ้นแล้ว',
+                default => 'ได้รับการอัปเดต',
+            };
+            $notePart = !empty($report->admin_comment) ? " (ข้อความตอบกลับ: {$report->admin_comment})" : '';
+            $descBrief = Str::limit($report->description, 35);
+            Notification::create([
+                'user_id' => $report->user_id,
+                'message' => "📢 ปัญหาที่คุณแจ้ง \"{$descBrief}\" {$statusThai}{$notePart}",
+                'notify_date' => now(),
+                'type' => 'problem',
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create problem report notification: ' . $e->getMessage());
+        }
 
         $rawType = $this->normalizeReportType($report->description);
 
