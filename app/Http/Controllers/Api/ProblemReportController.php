@@ -73,6 +73,17 @@ class ProblemReportController extends Controller
 
                 if ($thaiKeyword) {
                     $query->where('description', 'like', "%{$thaiKeyword}%");
+                } elseif ($normType === 'other') {
+                    $query->where(function ($q) {
+                        $q->where('description', 'like', '%อื่นๆ%')
+                            ->orWhere(function ($sub) {
+                                $sub->where('description', 'not like', '%ไฟฟ้า%')
+                                    ->where('description', 'not like', '%ประปา%')
+                                    ->where('description', 'not like', '%โครงสร้าง%')
+                                    ->where('description', 'not like', '%ความสะอาด%')
+                                    ->where('description', 'not like', '%ความคิดเห็น%');
+                            });
+                    });
                 }
             }
 
@@ -114,7 +125,7 @@ class ProblemReportController extends Controller
 
         // 2. Fetch from review_report table if filter is 'all' or 'feedback'
         if ($reqType === 'all' || $normType === 'feedback') {
-            $isAdminRequest = $request->is('api/admin/*') || $request->header('X-Admin-Request') === 'true';
+            $isAdminRequest = $request->is('*admin/*') || $request->is('api/admin/*') || $request->header('X-Admin-Request') === 'true' || str_contains($request->path(), 'admin');
             // Only include review reports if it is an admin request or if user_id is specified (personal reports)
             if ($isAdminRequest || $request->filled('user_id')) {
                 $reviewCtrl = new ReviewReportController();

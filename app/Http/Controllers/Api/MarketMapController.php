@@ -28,9 +28,9 @@ class MarketMapController extends Controller
         // Preload all shops with category and group by user_id
         $allShops = \App\Models\Shop::with('category')->orderBy('shop_id', 'asc')->get()->groupBy('user_id');
 
-        // Preload all approved/occupied bookings grouped by user_id (sorted latest first, matching Flutter client order)
+        // Preload all approved/occupied bookings grouped by user_id in ascending order to match shop creation order
         $allApprovedBookings = \App\Models\StallBooking::whereIn('status', ['approved', 'occupied'])
-            ->orderBy('booking_id', 'desc')
+            ->orderBy('booking_id', 'asc')
             ->get()
             ->groupBy('user_id');
 
