@@ -207,9 +207,11 @@ class ProblemReportController extends Controller
             $descBrief = Str::limit($report->description, 35);
             Notification::create([
                 'user_id' => $report->user_id,
+                'title' => 'อัปเดตสถานะปัญหาที่แจ้ง',
                 'message' => "📢 ปัญหาที่คุณแจ้ง \"{$descBrief}\" {$statusThai}{$notePart}",
                 'notify_date' => now(),
                 'type' => 'problem',
+                'reference_id' => $report->problem_id,
                 'is_read' => false,
             ]);
         } catch (\Throwable $e) {
@@ -292,6 +294,21 @@ class ProblemReportController extends Controller
             'report_date' => now(),
             'status' => 'pending',
         ]);
+
+        try {
+            $descBrief = \Illuminate\Support\Str::limit($request->input('description'), 35);
+            Notification::create([
+                'user_id' => $report->user_id,
+                'title' => 'ส่งรายงานปัญหาเรียบร้อย',
+                'message' => "📋 คุณได้แจ้งปัญหา \"{$descBrief}\" เรียบร้อยแล้ว เจ้าหน้าที่กำลังดำเนินการตรวจสอบ",
+                'notify_date' => now(),
+                'type' => 'problem',
+                'reference_id' => $report->problem_id,
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create problem report submitted notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => true,

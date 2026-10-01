@@ -26,8 +26,8 @@ class PasswordResetController extends Controller
             ], 422);
         }
 
-        $email = $request->input('email');
-        $user = User::where('email', $email)->first();
+        $email = strtolower(trim($request->input('email')));
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
 
         if (! $user) {
             return response()->json([
@@ -101,7 +101,8 @@ class PasswordResetController extends Controller
             ], 422);
         }
 
-        $record = PasswordResetCode::where('email', $request->email)
+        $email = strtolower(trim($request->email));
+        $record = PasswordResetCode::where('email', $email)
             ->where('code', $request->code)
             ->where('expires_at', '>', now())
             ->first();
@@ -135,7 +136,8 @@ class PasswordResetController extends Controller
             ], 422);
         }
 
-        $record = PasswordResetCode::where('email', $request->email)
+        $email = strtolower(trim($request->email));
+        $record = PasswordResetCode::where('email', $email)
             ->where('code', $request->code)
             ->where('expires_at', '>', now())
             ->first();
@@ -147,7 +149,7 @@ class PasswordResetController extends Controller
             ], 400);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
 
         if (! $user) {
             return response()->json([
@@ -162,7 +164,7 @@ class PasswordResetController extends Controller
         ]);
 
         // Delete used code
-        PasswordResetCode::where('email', $request->email)->delete();
+        PasswordResetCode::where('email', $email)->delete();
 
         return response()->json([
             'status' => true,

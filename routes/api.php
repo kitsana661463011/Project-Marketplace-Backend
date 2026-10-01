@@ -94,9 +94,11 @@ Route::prefix('v1')->group(function () use ($serveImage) {
     Route::delete('user-interests/{id}', [DashboardController::class, 'destroyUserInterest']);
     Route::get('maps/{id}', [MarketMapController::class, 'show']);
     Route::put('maps/{id}/items', [MarketMapController::class, 'saveItems']);
+    Route::match(['delete', 'post'], 'users/{id}/cancel-vendor-application', [UserController::class, 'cancelVendorApplication']);
     Route::match(['put', 'post'], 'users/{id}', [UserController::class, 'update']);
     Route::apiResource('users', UserController::class);
     Route::apiResource('shops', ShopController::class);
+    Route::match(['put', 'post'], 'items/{id}', [ItemController::class, 'update']);
     Route::apiResource('items', ItemController::class);
     Route::match(['put', 'post'], 'stalls/{id}', [StallController::class, 'update']);
     Route::apiResource('stalls', StallController::class);

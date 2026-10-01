@@ -20,9 +20,13 @@ class DashboardController extends Controller
         $pendingReports = (int) ProblemReport::where('status', 'pending')->count()
             + (int) \App\Models\ReviewReport::where('report_status', 'active')->count();
         $totalSellers = (int) DB::table('user')->where('role', 'seller')->where('document_status', 'approved')->count();
-        $pendingSellers = (int) DB::table('user')->where('document_status', 'pending')->where(function ($q) {
-            $q->where('role', 'buyer')->orWhere('role', 'seller');
-        })->count();
+        $pendingSellers = (int) DB::table('user')->where('document_status', 'pending')
+            ->where(function ($q) {
+                $q->whereNotNull('submission_date')->orWhereNotNull('document_image');
+            })
+            ->where(function ($q) {
+                $q->where('role', 'buyer')->orWhere('role', 'seller');
+            })->count();
 
         $totalShopsCount = (int) DB::table('shop')->count();
         $categoryShare = DB::table('shop_category as sc')
@@ -396,7 +400,10 @@ class DashboardController extends Controller
         $pendingBookings = (int) StallBooking::where('status', 'pending')->count();
         $pendingReports  = (int) ProblemReport::where('status', 'pending')->count()
                          + (int) \App\Models\ReviewReport::where('report_status', 'active')->count();
-        $pendingSellers  = (int) DB::table('user')->where('document_status', 'pending')->count();
+        $pendingSellers  = (int) DB::table('user')->where('document_status', 'pending')
+                         ->where(function ($q) {
+                             $q->whereNotNull('submission_date')->orWhereNotNull('document_image');
+                         })->count();
 
         return response()->json([
             'status' => true,

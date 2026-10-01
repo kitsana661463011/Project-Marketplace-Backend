@@ -30,8 +30,10 @@ class NotificationController extends Controller
                     'id' => $item->notification_id,
                     'notification_id' => $item->notification_id,
                     'user_id' => $item->user_id,
+                    'title' => $item->title,
                     'message' => $item->message,
                     'type' => $item->type ?? 'other',
+                    'reference_id' => $item->reference_id,
                     'is_read' => (bool) $item->is_read,
                     'notify_date' => $item->notify_date ? $item->notify_date->toIso8601String() : null,
                 ];

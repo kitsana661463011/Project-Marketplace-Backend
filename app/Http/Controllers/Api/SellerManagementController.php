@@ -116,6 +116,10 @@ class SellerManagementController extends Controller
         $query = User::query()
             ->where('document_status', 'pending')
             ->where(function ($q) {
+                $q->whereNotNull('submission_date')
+                    ->orWhereNotNull('document_image');
+            })
+            ->where(function ($q) {
                 $q->where('role', 'buyer')
                     ->orWhere('role', 'seller');
             });
@@ -201,9 +205,11 @@ class SellerManagementController extends Controller
         try {
             Notification::create([
                 'user_id' => $user->user_id,
+                'title' => 'อนุมัติการสมัครเป็นผู้ค้า',
                 'message' => '🎉 ยินดีด้วย! คำขอสมัครเป็นผู้ค้าของคุณได้รับการอนุมัติเรียบร้อยแล้ว คุณสามารถเริ่มเปิดร้านค้าและจองแผงค้าได้ทันที',
                 'notify_date' => now(),
                 'type' => 'seller',
+                'reference_id' => $user->user_id,
                 'is_read' => false,
             ]);
         } catch (\Throwable $e) {
@@ -263,9 +269,11 @@ class SellerManagementController extends Controller
         try {
             Notification::create([
                 'user_id' => $user->user_id,
+                'title' => 'ผลการสมัครผู้ค้าไม่ผ่านการอนุมัติ',
                 'message' => 'คำขอสมัครเป็นผู้ค้าไม่ผ่านการอนุมัติ: ' . $reason,
                 'notify_date' => now(),
                 'type' => 'seller',
+                'reference_id' => $user->user_id,
                 'is_read' => false,
             ]);
         } catch (\Throwable $e) {

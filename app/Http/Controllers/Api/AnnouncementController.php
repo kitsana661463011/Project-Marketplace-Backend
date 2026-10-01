@@ -104,6 +104,32 @@ class AnnouncementController extends Controller
 
         $announcement = Announcement::create($createData);
 
+        if ($announcement->status === 'active') {
+            try {
+                $userIds = \App\Models\User::where('status', 'active')->pluck('user_id');
+                $prefix = $announcement->announcement_type === 'urgent' ? '[ด่วน] ' : '';
+                $descBrief = \Illuminate\Support\Str::limit($announcement->description ?? $announcement->title, 50);
+                $notifData = [];
+                $now = now();
+                foreach ($userIds as $uid) {
+                    $notifData[] = [
+                        'user_id' => $uid,
+                        'title' => "{$prefix}ประกาศใหม่จากตลาด",
+                        'message' => "📢 {$announcement->title}: {$descBrief}",
+                        'notify_date' => $now,
+                        'type' => 'announcement',
+                        'reference_id' => $announcement->announcement_id,
+                        'is_read' => false,
+                    ];
+                }
+                if (!empty($notifData)) {
+                    \App\Models\Notification::insert($notifData);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to create announcement notifications: ' . $e->getMessage());
+            }
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Announcement created successfully',

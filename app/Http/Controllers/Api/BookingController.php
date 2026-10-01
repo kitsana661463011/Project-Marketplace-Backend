@@ -156,10 +156,34 @@ class BookingController extends Controller
             ], 422);
         }
 
+        $user = \App\Models\User::find($request->input('user_id'));
+        if (!$user || ($user->role !== 'seller' && $user->role !== 'admin') || $user->document_status !== 'approved') {
+            return response()->json([
+                'status' => false,
+                'message' => 'เฉพาะผู้ค้าที่ผ่านการตรวจสอบและอนุมัติเอกสารสำเนาบัตรประชาชนแล้วเท่านั้นจึงจะสามารถจองแผงค้าได้',
+            ], 403);
+        }
+
         $booking = StallBooking::create($request->only([
             'user_id', 'stall_id', 'booking_date', 'start_date', 'end_date', 'status',
             'rental_type', 'daily_price', 'monthly_price', 'entry_fee', 'security_deposit', 'total_amount',
         ]));
+
+        try {
+            $stall = Stall::find($booking->stall_id);
+            $stallNumber = $stall ? $stall->stall_number : 'แผงค้า';
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'title' => 'ยื่นคำขอจองแผงค้าแล้ว',
+                'message' => "📋 คุณได้ยื่นคำขอจองแผงค้า {$stallNumber} เรียบร้อยแล้ว อยู่ระหว่างรอตรวจสอบและชำระเงิน",
+                'notify_date' => now(),
+                'type' => 'booking',
+                'reference_id' => $booking->booking_id,
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create booking submission notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => true,
@@ -300,11 +324,14 @@ class BookingController extends Controller
                 ? "🎉 คำขอต่อสัญญาแผงค้า {$stallNumber} ได้รับการอนุมัติแล้ว (ขยายสัญญาถึง: {$booking->end_date})"
                 : "🎉 คำขอจองแผงค้า {$stallNumber} ได้รับการอนุมัติเรียบร้อยแล้ว สามารถเริ่มเข้าใช้งานแผงค้าได้";
 
+            $title = $isRenewal ? 'อนุมัติการต่อสัญญาแผงค้า' : 'อนุมัติการจองแผงค้า';
             Notification::create([
                 'user_id' => $booking->user_id,
+                'title' => $title,
                 'message' => $msg,
                 'notify_date' => now(),
                 'type' => 'booking',
+                'reference_id' => $booking->booking_id,
                 'is_read' => false,
             ]);
         } catch (\Throwable $e) {
@@ -439,9 +466,11 @@ class BookingController extends Controller
             $reasonText = $rejectReason ? ": {$rejectReason}" : '';
             Notification::create([
                 'user_id' => $booking->user_id,
+                'title' => 'คำขอจองแผงค้าถูกปฏิเสธ',
                 'message' => "❌ คำขอจองแผงค้า {$stallNumber} ถูกปฏิเสธ{$reasonText}",
                 'notify_date' => now(),
                 'type' => 'booking',
+                'reference_id' => $booking->booking_id,
                 'is_read' => false,
             ]);
         } catch (\Throwable $e) {
@@ -526,6 +555,21 @@ class BookingController extends Controller
 
         $booking->refresh();
         $booking->load(['user', 'stall', 'payment']);
+
+        try {
+            $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'title' => 'ยื่นคำขอคืนเงินเรียบร้อย',
+                'message' => "📝 ระบบได้รับคำร้องขอคืนเงินสำหรับแผงค้า {$stallNumber} เรียบร้อยแล้ว เจ้าหน้าที่จะตรวจสอบและดำเนินการโอนเงินคืนตามบัญชีที่คุณระบุ",
+                'notify_date' => now(),
+                'type' => 'refund',
+                'reference_id' => $booking->booking_id,
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create refund request notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => true,
@@ -631,9 +675,11 @@ class BookingController extends Controller
             $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
             Notification::create([
                 'user_id' => $booking->user_id,
+                'title' => 'ดำเนินการโอนเงินคืนเรียบร้อย',
                 'message' => "💵 ดำเนินการโอนเงินคืนสำหรับแผงค้า {$stallNumber} เรียบร้อยแล้ว (สามารถตรวจสอบหลักฐานสลิปการโอนได้ในประวัติการจอง)",
                 'notify_date' => now(),
                 'type' => 'refund',
+                'reference_id' => $booking->booking_id,
                 'is_read' => false,
             ]);
         } catch (\Throwable $e) {
@@ -736,6 +782,21 @@ class BookingController extends Controller
 
         $booking->refresh();
         $booking->load(['user', 'stall', 'payment']);
+
+        try {
+            $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
+            Notification::create([
+                'user_id' => $booking->user_id,
+                'title' => 'ยื่นคำขอต่อสัญญาแผงค้าแล้ว',
+                'message' => "📋 ได้รับคำขอต่อสัญญาแผงค้า {$stallNumber} ถึงวันที่ {$request->input('renewal_end_date')} เรียบร้อยแล้ว กำลังรอเจ้าหน้าที่ตรวจสอบ",
+                'notify_date' => now(),
+                'type' => 'booking',
+                'reference_id' => $booking->booking_id,
+                'is_read' => false,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create renewal submission notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => true,

@@ -32,6 +32,10 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->has('email')) {
+            $request->merge(['email' => strtolower(trim($request->email))]);
+        }
+
         $validator = Validator::make($request->all(), [
             'username' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:100', 'unique:user,email'],
@@ -40,17 +44,25 @@ class UserController extends Controller
             'profile_image' => ['nullable', 'string', 'max:255'],
             'role' => ['required', Rule::in(['buyer', 'seller', 'admin'])],
             'interests' => ['nullable'],
+        ], [
+            'email.unique' => 'อีเมลนี้มีผู้ใช้งานแล้วในระบบ กรุณาใช้อีเมลอื่นหรือเข้าสู่ระบบ',
+            'email.email' => 'รูปแบบอีเมลไม่ถูกต้อง',
+            'email.required' => 'กรุณากรอกอีเมล',
+            'username.required' => 'กรุณากรอกชื่อ-นามสกุล',
+            'password.required' => 'กรุณากรอกรหัสผ่าน',
+            'password.min' => 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation failed',
+                'message' => $validator->errors()->first() ?: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง',
                 'data' => $validator->errors(),
             ], 422);
         }
 
         $data = $request->only(['username', 'email', 'phone', 'profile_image', 'role']);
+        $data['email'] = strtolower(trim($data['email']));
         $data['password'] = bcrypt($request->password);
 
         $user = User::create($data);
@@ -191,7 +203,36 @@ class UserController extends Controller
             ], 422);
         }
 
-        $data = $request->only(['username', 'phone', 'role', 'status', 'citizen_id', 'document_status', 'submission_date', 'address']);
+        // Security Guard: Only allow user-modifiable profile fields
+        // 'role', 'status', and 'document_status' must NOT be freely settable by the client.
+        $data = $request->only(['username', 'phone', 'address']);
+
+        // Handle vendor application / document submission
+        $hasDocImage = $request->hasFile('document_image_file') || $request->hasFile('document_image') || $request->filled('document_image');
+        $hasCitizenId = $request->filled('citizen_id');
+
+        if ($hasCitizenId) {
+            $cleaned = preg_replace('/\D/', '', (string) $request->input('citizen_id'));
+            if (!empty($cleaned)) {
+                $data['citizen_id'] = $cleaned;
+            }
+        }
+
+        // When a non-seller submits vendor documents or reapplies:
+        // Always enforce role = 'buyer', document_status = 'pending', and record submission_date.
+        // Role = 'seller' and document_status = 'approved' CAN ONLY be granted by admin approval endpoint.
+        if ($hasDocImage || $hasCitizenId) {
+            if ($user->role !== 'seller') {
+                $data['role'] = 'buyer';
+                $data['document_status'] = 'pending';
+                $data['submission_date'] = now();
+                $data['reject_reason'] = null; // Clear rejection reason on new submission
+            }
+        }
+
+        if ($request->filled('email')) {
+            $data['email'] = strtolower(trim($request->email));
+        }
 
         if ($request->has('interests')) {
             $interestsRaw = $request->input('interests');
@@ -239,6 +280,22 @@ class UserController extends Controller
 
         $user->update($data);
 
+        if (($hasDocImage || $hasCitizenId) && $user->role !== 'seller') {
+            try {
+                \App\Models\Notification::create([
+                    'user_id' => $user->user_id,
+                    'title' => 'ยื่นคำขอสมัครเป็นผู้ค้าแล้ว',
+                    'message' => '📋 ได้รับข้อมูลและสำเนาเอกสารการสมัครเป็นผู้ค้าของคุณเรียบร้อยแล้ว อยู่ระหว่างการตรวจสอบของเจ้าหน้าที่',
+                    'notify_date' => now(),
+                    'type' => 'seller',
+                    'reference_id' => $user->user_id,
+                    'is_read' => false,
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to create vendor application submitted notification: ' . $e->getMessage());
+            }
+        }
+
         $freshUser = $user->fresh()->toArray();
         $freshUser['interests'] = \Illuminate\Support\Facades\DB::table('user_has_interest as uhi')
             ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')
@@ -280,6 +337,57 @@ class UserController extends Controller
             'status' => true,
             'message' => 'User deleted successfully',
             'data' => null,
+        ], 200);
+    }
+
+    /**
+     * Cancel / Delete a submitted vendor application
+     */
+    public function cancelVendorApplication($id)
+    {
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User not found',
+                'data' => null,
+            ], 404);
+        }
+
+        // Cannot cancel if already an approved seller
+        if ($user->role === 'seller' && $user->document_status === 'approved') {
+            return response()->json([
+                'status' => false,
+                'message' => 'ไม่สามารถยกเลิกคำขอได้ เนื่องจากบัญชีนี้ได้รับการอนุมัติเป็นผู้ค้าแล้ว',
+                'data' => null,
+            ], 400);
+        }
+
+        // Remove old document image file from disk if stored locally
+        if ($user->document_image && file_exists(storage_path('images/' . $user->document_image))) {
+            @unlink(storage_path('images/' . $user->document_image));
+        }
+
+        $user->document_status = 'pending';
+        $user->submission_date = null;
+        $user->citizen_id = null;
+        $user->document_image = null;
+        $user->reject_reason = null;
+        $user->save();
+
+        $freshUser = $user->fresh()->toArray();
+        $freshUser['interests'] = \Illuminate\Support\Facades\DB::table('user_has_interest as uhi')
+            ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')
+            ->where('uhi.user_id', $user->user_id)
+            ->orderBy('uhi.sort_order', 'asc')
+            ->pluck('uio.interest_name')
+            ->toArray();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'ยกเลิกคำขอสมัครเป็นผู้ค้าเรียบร้อยแล้ว',
+            'data' => $freshUser,
         ], 200);
     }
 }

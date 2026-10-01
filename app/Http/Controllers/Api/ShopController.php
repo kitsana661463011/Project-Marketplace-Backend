@@ -112,6 +112,14 @@ class ShopController extends Controller
             ], 422);
         }
 
+        $owner = \App\Models\User::find($request->input('user_id'));
+        if (!$owner || ($owner->role !== 'seller' && $owner->role !== 'admin') || $owner->document_status !== 'approved') {
+            return response()->json([
+                'status' => false,
+                'message' => 'เฉพาะผู้ค้าที่ผ่านการตรวจสอบและอนุมัติเอกสารสำเนาบัตรประชาชนแล้วเท่านั้นจึงจะสามารถสร้างร้านค้าได้',
+            ], 403);
+        }
+
         $imagePath = null;
         if ($request->hasFile('shop_image')) {
             $imagePath = $this->uploadImage($request->file('shop_image'));

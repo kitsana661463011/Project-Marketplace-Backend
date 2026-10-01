@@ -14,10 +14,12 @@ class Notification extends Model
 
     protected $fillable = [
         'user_id',
+        'title',
         'message',
         'notify_date',
         'is_read',
         'type',
+        'reference_id',
     ];
 
     protected $casts = [

@@ -15,8 +15,18 @@ class ItemController extends Controller
             @mkdir(storage_path('images'), 0777, true);
         }
 
-        if ($oldImage && file_exists(storage_path('images/' . $oldImage))) {
-            @unlink(storage_path('images/' . $oldImage));
+        if ($oldImage) {
+            $oldFilename = basename($oldImage);
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($oldFilename);
+            if (file_exists(storage_path('images/' . $oldFilename))) {
+                @unlink(storage_path('images/' . $oldFilename));
+            }
+            if (file_exists(storage_path('app/public/' . $oldFilename))) {
+                @unlink(storage_path('app/public/' . $oldFilename));
+            }
+            if (file_exists(public_path('uploads/' . $oldFilename))) {
+                @unlink(public_path('uploads/' . $oldFilename));
+            }
         }
 
         $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
@@ -201,6 +211,8 @@ class ItemController extends Controller
             } else if (is_array($inputImages)) {
                 $data['images'] = $inputImages;
             }
+        if (isset($data['item_image']) && !isset($data['images'])) {
+            $data['images'] = [$data['item_image']];
         }
 
         $item->update($data);
@@ -225,18 +237,32 @@ class ItemController extends Controller
         }
 
         if ($item->item_image) {
-            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($item->item_image);
-            if (file_exists(storage_path('images/' . $item->item_image))) {
-                @unlink(storage_path('images/' . $item->item_image));
+            $filename = basename($item->item_image);
+            \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($filename);
+            if (file_exists(storage_path('images/' . $filename))) {
+                @unlink(storage_path('images/' . $filename));
+            }
+            if (file_exists(storage_path('app/public/' . $filename))) {
+                @unlink(storage_path('app/public/' . $filename));
+            }
+            if (file_exists(public_path('uploads/' . $filename))) {
+                @unlink(public_path('uploads/' . $filename));
             }
         }
 
         if (is_array($item->images)) {
             foreach ($item->images as $img) {
                 if ($img) {
-                    \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($img);
-                    if (file_exists(storage_path('images/' . $img))) {
-                        @unlink(storage_path('images/' . $img));
+                    $filename = basename($img);
+                    \Illuminate\Support\Facades\Storage::disk('custom_images')->delete($filename);
+                    if (file_exists(storage_path('images/' . $filename))) {
+                        @unlink(storage_path('images/' . $filename));
+                    }
+                    if (file_exists(storage_path('app/public/' . $filename))) {
+                        @unlink(storage_path('app/public/' . $filename));
+                    }
+                    if (file_exists(public_path('uploads/' . $filename))) {
+                        @unlink(public_path('uploads/' . $filename));
                     }
                 }
             }

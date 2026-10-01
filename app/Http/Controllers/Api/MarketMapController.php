@@ -254,6 +254,14 @@ class MarketMapController extends Controller
                         $hasElectricity = isset($item['has_electricity']) ? (bool)$item['has_electricity'] : true;
                         $hasWater = isset($item['has_water']) ? (bool)$item['has_water'] : true;
 
+                        $rawStallStatus = $item['status'] ?? 'available';
+                        $dbStallStatus = 'available';
+                        if (in_array($rawStallStatus, ['repair', 'maintenance'])) {
+                            $dbStallStatus = 'maintenance';
+                        } elseif (in_array($rawStallStatus, ['occupied', 'approved', 'verified', 'pending', 'renewal_pending', 'refund_requested', 'refunded'])) {
+                            $dbStallStatus = 'occupied';
+                        }
+
                         $stallPayload = [
                             'size'             => $item['size'] ?? '3x3 เมตร',
                             'price'            => $dailyPrice ?: ($monthlyPrice ?: 500.00),
@@ -264,7 +272,7 @@ class MarketMapController extends Controller
                             'security_deposit' => $rentalType === 'monthly' ? $securityDeposit : null,
                             'has_electricity'  => $hasElectricity,
                             'has_water'        => $hasWater,
-                            'status'           => ($item['status'] ?? 'available') === 'repair' ? 'maintenance' : ($item['status'] ?? 'available'),
+                            'status'           => $dbStallStatus,
                         ];
 
                         if (array_key_exists('image1', $item)) {
