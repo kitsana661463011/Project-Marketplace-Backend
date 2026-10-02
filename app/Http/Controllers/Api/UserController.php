@@ -280,22 +280,6 @@ class UserController extends Controller
 
         $user->update($data);
 
-        if (($hasDocImage || $hasCitizenId) && $user->role !== 'seller') {
-            try {
-                \App\Models\Notification::create([
-                    'user_id' => $user->user_id,
-                    'title' => 'ยื่นคำขอสมัครเป็นผู้ค้าแล้ว',
-                    'message' => '📋 ได้รับข้อมูลและสำเนาเอกสารการสมัครเป็นผู้ค้าของคุณเรียบร้อยแล้ว อยู่ระหว่างการตรวจสอบของเจ้าหน้าที่',
-                    'notify_date' => now(),
-                    'type' => 'seller',
-                    'reference_id' => $user->user_id,
-                    'is_read' => false,
-                ]);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Failed to create vendor application submitted notification: ' . $e->getMessage());
-            }
-        }
-
         $freshUser = $user->fresh()->toArray();
         $freshUser['interests'] = \Illuminate\Support\Facades\DB::table('user_has_interest as uhi')
             ->join('user_interest_option as uio', 'uhi.interest_id', '=', 'uio.interest_id')

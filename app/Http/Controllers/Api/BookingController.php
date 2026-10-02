@@ -169,22 +169,6 @@ class BookingController extends Controller
             'rental_type', 'daily_price', 'monthly_price', 'entry_fee', 'security_deposit', 'total_amount',
         ]));
 
-        try {
-            $stall = Stall::find($booking->stall_id);
-            $stallNumber = $stall ? $stall->stall_number : 'แผงค้า';
-            Notification::create([
-                'user_id' => $booking->user_id,
-                'title' => 'ยื่นคำขอจองแผงค้าแล้ว',
-                'message' => "📋 คุณได้ยื่นคำขอจองแผงค้า {$stallNumber} เรียบร้อยแล้ว อยู่ระหว่างรอตรวจสอบและชำระเงิน",
-                'notify_date' => now(),
-                'type' => 'booking',
-                'reference_id' => $booking->booking_id,
-                'is_read' => false,
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('Failed to create booking submission notification: ' . $e->getMessage());
-        }
-
         return response()->json([
             'status' => true,
             'message' => 'Booking created successfully',

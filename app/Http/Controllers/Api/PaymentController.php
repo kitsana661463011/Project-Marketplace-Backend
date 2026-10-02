@@ -82,25 +82,6 @@ class PaymentController extends Controller
 
         $payment = Payment::create($data);
 
-        // แจ้งเตือนผู้ใช้เมื่อส่งสลิปชำระเงินเรียบร้อย
-        try {
-            $booking = $payment->booking()->with('stall')->first();
-            if ($booking && $booking->user_id) {
-                $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
-                Notification::create([
-                    'user_id' => $booking->user_id,
-                    'title' => 'ได้รับหลักฐานการชำระเงินแล้ว',
-                    'message' => "📄 ได้รับหลักฐานการชำระเงินสำหรับแผงค้า {$stallNumber} เรียบร้อยแล้ว ระบบกำลังรอเจ้าหน้าที่ตรวจสอบ",
-                    'notify_date' => now(),
-                    'type' => 'booking',
-                    'reference_id' => $booking->booking_id,
-                    'is_read' => false,
-                ]);
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Failed to create payment slip notification: ' . $e->getMessage());
-        }
-
         return response()->json([
             'status' => true,
             'message' => 'Payment created successfully',
@@ -165,26 +146,6 @@ class PaymentController extends Controller
             'booking_id', 'amount', 'payment_date', 'payment_slip', 'status',
             'refund_reason', 'refund_bank_name', 'refund_account_number', 'refund_account_name', 'refund_slip', 'refunded_at'
         ]));
-
-        if ($request->has('payment_slip') || $request->hasFile('payment_slip') || $request->hasFile('payment_slip_file')) {
-            try {
-                $booking = $payment->booking()->with('stall')->first();
-                if ($booking && $booking->user_id) {
-                    $stallNumber = $booking->stall ? $booking->stall->stall_number : 'แผงค้า';
-                    Notification::create([
-                        'user_id' => $booking->user_id,
-                        'title' => 'อัปโหลดหลักฐานการชำระเงินใหม่แล้ว',
-                        'message' => "📄 ได้รับหลักฐานการชำระเงินใหม่สำหรับแผงค้า {$stallNumber} เรียบร้อยแล้ว กำลังรอเจ้าหน้าที่ตรวจสอบ",
-                        'notify_date' => now(),
-                        'type' => 'booking',
-                        'reference_id' => $booking->booking_id,
-                        'is_read' => false,
-                    ]);
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Failed to create payment slip update notification: ' . $e->getMessage());
-            }
-        }
 
         return response()->json([
             'status' => true,
