@@ -211,6 +211,8 @@ class ItemController extends Controller
             } else if (is_array($inputImages)) {
                 $data['images'] = $inputImages;
             }
+        }
+
         if (isset($data['item_image']) && !isset($data['images'])) {
             $data['images'] = [$data['item_image']];
         }
